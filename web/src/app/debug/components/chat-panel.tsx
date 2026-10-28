@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { fetchModels } from "@/lib/api";
+import { fetchModelCatalog } from "@/lib/api";
 import { httpRequest } from "@/lib/request";
 
 import { pretty, type ChatCompletionResponse, type ChatContentPart, type ChatMessage } from "./types";
@@ -83,14 +83,13 @@ export function ChatPanel() {
 
   useEffect(() => {
     let active = true;
-    void fetchModels()
+    const isChatModel = (id: string) =>
+      Boolean(id) && id !== "research" && !/image|reserved_gate|external_access|chatgpt_alpha_model/i.test(id);
+    void fetchModelCatalog()
       .then((result) => {
         if (!active) return;
-        const ids = (result.data || [])
-          .map((item) => String(item.id || "").trim())
-          .filter(Boolean);
-        const ordered = ["auto", ...ids.filter((id) => id !== "auto")];
-        setModels(Array.from(new Set(ordered)));
+        const ids = (result.catalog?.chat_models || []).map((id) => String(id || "").trim()).filter(isChatModel);
+        setModels(Array.from(new Set(["auto", ...ids.filter((id) => id !== "auto")])));
       })
       .catch(() => {
         /* keep the fallback list */

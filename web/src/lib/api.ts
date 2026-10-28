@@ -1022,3 +1022,17 @@ export type DashboardView = {
 export async function fetchDashboard(hours = 24) {
   return httpRequest<DashboardView>(`/api/dashboard?hours=${hours}`);
 }
+
+export type ModelCatalogResponse = {
+  catalog: {
+    chat_models: string[];
+    image_models: string[];
+    defaults: { chat_model: string; image_model: string };
+    revision: string;
+  };
+  settings: Record<string, unknown>;
+};
+
+export async function fetchModelCatalog() {
+  return httpRequest<ModelCatalogResponse>("/api/model-catalog");
+}

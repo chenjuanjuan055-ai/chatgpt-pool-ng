@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from services.model_catalog_service import build_catalog
+from services.model_catalog_service import build_catalog, is_chat_model
 from utils.helper import CODEX_IMAGE_MODEL, WEB_IMAGE_MODELS, image_upstream_model, split_image_model
 
 
@@ -27,6 +27,26 @@ class BuildCatalogTest(unittest.TestCase):
         catalog = build_catalog(upstream_models=["gpt-5.6", "gpt-5.5", "auto"], accounts=[])
         self.assertEqual(catalog["chat_models"][:3], ["gpt-5.6", "gpt-5.5", "auto"])
         self.assertEqual(catalog["source"]["chat"], "upstream")
+
+    def test_upstream_filters_image_and_reserved(self):
+        catalog = build_catalog(
+            upstream_models=[
+                "auto",
+                "gpt-5-6",
+                "gpt-image-2",
+                "gpt-image-2.5-flare",
+                "chatgpt_alpha_model_external_access_reserved_gate_12",
+                "research",
+            ],
+            accounts=[],
+        )
+        self.assertEqual(catalog["chat_models"], ["auto", "gpt-5-6"])
+
+    def test_is_chat_model(self):
+        self.assertTrue(is_chat_model("gpt-6"))
+        self.assertFalse(is_chat_model("gpt-image-2"))
+        self.assertFalse(is_chat_model("chatgpt_alpha_model_external_access_reserved_gate_13"))
+        self.assertFalse(is_chat_model("research"))
 
     def test_config_overrides_win(self):
         catalog = build_catalog(

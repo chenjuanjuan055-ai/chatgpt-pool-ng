@@ -31,6 +31,22 @@ def _unique(values: Iterable[Any]) -> list[str]:
     return result
 
 
+_NON_CHAT_MODELS = {"research"}
+_RESERVED_MARKERS = ("reserved_gate", "external_access", "chatgpt_alpha_model")
+
+
+def is_chat_model(model: object) -> bool:
+    """Filter out image and internal/reserved models from chat catalogs."""
+    text = str(model or "").strip().lower()
+    if not text or text in _NON_CHAT_MODELS:
+        return False
+    if "image" in text:
+        return False
+    if any(marker in text for marker in _RESERVED_MARKERS):
+        return False
+    return True
+
+
 def _codex_types(accounts: Iterable[dict[str, Any]]) -> set[str]:
     types: set[str] = set()
     for account in accounts:
@@ -57,7 +73,7 @@ def build_catalog(
     accounts = list(accounts or [])
     configured_chat = _unique(settings.get("chat_models") or [])
     configured_image = _unique(settings.get("image_models") or [])
-    upstream = _unique(upstream_models or [])
+    upstream = [model for model in _unique(upstream_models or []) if is_chat_model(model)]
 
     chat_source = "config" if configured_chat else ("upstream" if upstream else "fallback")
     chat_models = configured_chat or upstream or list(FALLBACK_CHAT_MODELS)
@@ -101,4 +117,4 @@ def get_model_catalog() -> dict[str, Any]:
     return build_catalog(settings=settings, upstream_models=upstream, accounts=account_service.list_accounts())
 
 
-__all__ = ["FALLBACK_CHAT_MODELS", "build_catalog", "get_model_catalog"]
+__all__ = ["FALLBACK_CHAT_MODELS", "build_catalog", "get_model_catalog", "is_chat_model"]
