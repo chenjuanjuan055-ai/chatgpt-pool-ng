@@ -28,6 +28,7 @@ from services.account_health import analyze_accounts
 from services.account_service import account_service
 from services.egress_service import egress_manager
 from services.metrics_service import metrics_service
+from services.model_catalog_service import get_model_catalog
 from services.proxy_service import proxy_settings, test_clearance, test_proxy
 
 
@@ -215,6 +216,13 @@ def create_router(app_version: str) -> APIRouter:
             "backend": storage.get_backend_info(),
             "health": storage.health_check(),
         }
+
+    @router.get("/api/model-catalog")
+    async def model_catalog_endpoint(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        catalog = await run_in_threadpool(get_model_catalog)
+        settings = config.get_model_catalog_settings()
+        return {"catalog": catalog, "settings": settings}
 
     @router.get("/api/metrics/summary")
     async def metrics_summary(window_seconds: int = 3600, authorization: str | None = Header(default=None)):

@@ -14,7 +14,13 @@ from fastapi import HTTPException
 from services.proxy_service import proxy_settings
 from utils.log import logger
 
-BASE_IMAGE_MODELS = {"gpt-image-2", "codex-gpt-image-2"}
+WEB_IMAGE_MODELS = (
+    "gpt-image-2",
+    "gpt-image-2.5",
+    "gpt-image-2.5-flare",
+    "gpt-image-2.5-sunburst",
+)
+BASE_IMAGE_MODELS = {*WEB_IMAGE_MODELS, "codex-gpt-image-2"}
 IMAGE_MODEL_PLAN_TYPES = ("plus", "team", "pro")
 CODEX_IMAGE_MODEL = "codex-gpt-image-2"
 PREFIXED_CODEX_IMAGE_MODELS = {
@@ -129,6 +135,23 @@ def is_supported_image_model(model: object) -> bool:
 def is_codex_image_model(model: object) -> bool:
     _, base_model = split_image_model(model)
     return base_model == CODEX_IMAGE_MODEL
+
+
+def image_upstream_model(model: object, default_slug: str = "gpt-5-3") -> str:
+    """把公开图片模型名映射为上游 model slug。
+
+    gpt-image-2 默认映射到 ``default_slug``（与线上验证过的 gpt-5-3 对齐）；
+    2.5 系列上游走 ``auto``；Codex 图片模型原样透传。
+    """
+    _, base_model = split_image_model(model)
+    if not base_model:
+        return "auto"
+    if base_model == CODEX_IMAGE_MODEL:
+        return base_model
+    if base_model == "gpt-image-2":
+        slug = str(default_slug or "").strip()
+        return slug or "auto"
+    return "auto"
 
 
 def is_image_chat_request(body: dict[str, object]) -> bool:

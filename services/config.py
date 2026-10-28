@@ -16,6 +16,43 @@ CONFIG_FILE = BASE_DIR / "config.json"
 VERSION_FILE = BASE_DIR / "VERSION"
 BACKUP_STATE_FILE = DATA_DIR / "backup_state.json"
 
+DEFAULT_MODEL_CATALOG = {
+    "chat_models": [],
+    "image_models": [],
+    "image_upscale_enabled": False,
+    "image_upstream_model": "gpt-5-3",
+    "image_thinking_effort": "",
+}
+
+
+def _normalize_string_list(value: object) -> list[str]:
+    items = value if isinstance(value, list) else []
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _normalize_model_catalog_settings(value: object) -> dict[str, object]:
+    source = value if isinstance(value, dict) else {}
+    return {
+        "chat_models": _normalize_string_list(source.get("chat_models")),
+        "image_models": _normalize_string_list(source.get("image_models")),
+        "image_upscale_enabled": _normalize_bool(
+            source.get("image_upscale_enabled"), bool(DEFAULT_MODEL_CATALOG["image_upscale_enabled"])
+        ),
+        "image_upstream_model": str(
+            source.get("image_upstream_model") or DEFAULT_MODEL_CATALOG["image_upstream_model"]
+        ).strip(),
+        "image_thinking_effort": str(source.get("image_thinking_effort") or "").strip().lower(),
+    }
+
+
 DEFAULT_ALERTS = {
     "enabled": False,
     "webhook_url": "",
@@ -687,6 +724,7 @@ class ConfigStore:
         data["default_thinking_effort"] = self.default_thinking_effort
         data["backup"] = self.get_backup_settings()
         data["alerts"] = self.get_alert_settings()
+        data["model_catalog"] = self.get_model_catalog_settings()
         data["image_storage"] = self.get_image_storage_settings()
         data["chat_completion_cache"] = self.get_chat_completion_cache_settings()
         data["proxy_runtime"] = self.get_public_proxy_runtime_settings()
@@ -720,6 +758,8 @@ class ConfigStore:
         next_data.update(dict(data or {}))
         if "backup" in next_data:
             next_data["backup"] = _normalize_backup_settings(next_data.get("backup"))
+        if "model_catalog" in next_data:
+            next_data["model_catalog"] = _normalize_model_catalog_settings(next_data.get("model_catalog"))
         if "alerts" in next_data:
             previous_alerts = self.get_alert_settings()
             incoming_alerts = next_data.get("alerts")
@@ -755,6 +795,9 @@ class ConfigStore:
         self.data = next_data
         self._save()
         return self.get()
+
+    def get_model_catalog_settings(self) -> dict[str, object]:
+        return _normalize_model_catalog_settings(self.data.get("model_catalog"))
 
     def get_alert_settings(self) -> dict[str, object]:
         return _normalize_alert_settings(self.data.get("alerts"))
