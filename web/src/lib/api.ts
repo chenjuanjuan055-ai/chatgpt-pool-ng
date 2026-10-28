@@ -924,3 +924,74 @@ export async function testProxyClearance(targetUrl?: string) {
     body: { target_url: targetUrl ?? "https://chatgpt.com" },
   });
 }
+
+// ---- 监控 / 出口池 / 账号健康 ----
+export type EgressEndpointStatus = {
+  url: string;
+  label: string;
+  enabled: boolean;
+  weight: number;
+  healthy: boolean | null;
+  state: "healthy" | "failed" | "unknown" | "cooling";
+  latency_ms: number | null;
+  consecutive_failures: number;
+  cooldown_remaining: number;
+  last_error: string;
+};
+
+export type EgressPoolView = {
+  enabled: boolean;
+  egress_mode: string;
+  settings: Record<string, unknown>;
+  endpoints: EgressEndpointStatus[];
+};
+
+export type AccountHealthSummary = {
+  total: number;
+  healthy: number;
+  dead: number;
+  at_only: number;
+  status_counts: Record<string, number>;
+  status_labels: Record<string, string>;
+  age_buckets: Record<string, Record<string, number>>;
+  type_counts: Record<string, number>;
+  dead_samples: Array<Record<string, unknown>>;
+  at_only_samples: Array<Record<string, unknown>>;
+};
+
+export type MetricsSummary = {
+  window_seconds: number;
+  total: number;
+  failed: number;
+  success: number;
+  success_rate: number | null;
+  rpm: number;
+  p50_ms: number | null;
+  p95_ms: number | null;
+  by_model: Array<{ model: string; total: number; failed: number; success_rate: number | null; p95_ms: number | null }>;
+  by_error_category: Array<{ category: string; label: string; hint: string; count: number }>;
+  recent_failures: Array<{ ts: number; model: string; endpoint: string; error_category: string; error: string; account_email: string }>;
+};
+
+export async function fetchEgressPool() {
+  return httpRequest<EgressPoolView>("/api/proxy/egress");
+}
+
+export async function probeEgressPool() {
+  return httpRequest<{ endpoints: EgressEndpointStatus[] }>("/api/proxy/egress/probe", { method: "POST" });
+}
+
+export async function fetchAccountHealth() {
+  return httpRequest<AccountHealthSummary>("/api/accounts/health-summary");
+}
+
+export async function cleanupDeadAccounts(apply: boolean, includeAtOnly = false) {
+  return httpRequest<{ matched: number; deleted: number; applied: boolean; items: Array<Record<string, unknown>> }>(
+    "/api/accounts/cleanup-dead",
+    { method: "POST", body: { apply, include_at_only: includeAtOnly } },
+  );
+}
+
+export async function fetchMetricsSummary(windowSeconds = 3600) {
+  return httpRequest<MetricsSummary>(`/api/metrics/summary?window_seconds=${windowSeconds}`);
+}

@@ -4,3 +4,7 @@ __pycache__/
 data/
 logs/
 .DS_Store
+web/node_modules/
+web/.next/
+web/package-lock.json
+web/.npmrc

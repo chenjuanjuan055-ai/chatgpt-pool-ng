@@ -27,6 +27,10 @@
 + [新增] 单元测试 `test/test_observability.py`（错误分类 + 指标聚合 + 告警判定 + 日志轮转）。
 + [新增] 文档 `docs/observability.md`。
 
+### 面板（M4）
++ [新增] 新页面 `/monitor`（顶部导航「监控」）：账号健康卡片（总数/健康/死号/仅 AT + 状态分布 + 预览/清理死号按钮）、出口池表格（状态/延迟/连续失败/冷却剩余/最近错误 + 立即探活）、请求指标（成功率/RPM/P50/P95/失败数）、按模型统计、错误分类、最近失败列表；每 30 秒自动刷新。
++ [新增] 前端 API 封装：`fetchEgressPool` / `probeEgressPool` / `fetchAccountHealth` / `cleanupDeadAccounts` / `fetchMetricsSummary`。
+
 ## 1.8.0 - 2026-07-28
 
 + [新增] 新增默认请求上游模型名称和默认思考强度配置，支持在设置页面修改，并可通过模型名的 `-standard`、`-extended`、`-max` 后缀覆盖思考强度。
