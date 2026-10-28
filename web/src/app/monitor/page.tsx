@@ -69,7 +69,7 @@ export default function MonitorPage() {
       setMetrics(metricsData);
       setEgress(egressData);
       setHealth(healthData);
-      setDashboard(dashboardData.rows.slice(-12));
+      setDashboard(Array.isArray(dashboardData?.rows) ? dashboardData.rows.slice(-12) : []);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载监控数据失败");
     } finally {
