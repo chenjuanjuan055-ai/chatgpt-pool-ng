@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from services.config import config
+from services.request_context import get_request_group
 from services.log_service import (
     LOG_TYPE_ACCOUNT,
     log_service,
@@ -221,6 +222,7 @@ class AccountService:
         normalized["email"] = normalized.get("email") or None
         normalized["user_id"] = normalized.get("user_id") or None
         normalized["proxy"] = str(normalized.get("proxy") or "").strip()
+        normalized["group_id"] = str(normalized.get("group_id") or "").strip()
         source_type = normalized.get("source_type")
         if not source_type and str(normalized.get("export_type") or "").strip().lower() == "codex":
             source_type = "codex"
@@ -886,6 +888,13 @@ class AccountService:
         with self._lock:
             return list(self._accounts)
 
+    @staticmethod
+    def _account_matches_group(item: dict) -> bool:
+        group_id = get_request_group()
+        if not group_id:
+            return True
+        return str(item.get("group_id") or "").strip() == group_id
+
     def _list_ready_candidate_tokens(
             self,
             excluded_tokens: set[str] | None = None,
@@ -898,6 +907,7 @@ class AccountService:
             token
             for item in self._accounts.values()
             if self._is_image_account_available(item)
+               and self._account_matches_group(item)
                and self._account_matches_plan_type(item, plan_type)
                and self._account_matches_any_plan_type(item, plan_types)
                and self._account_matches_source_type(item, source_type)
@@ -1014,6 +1024,7 @@ class AccountService:
                 token
                 for account in self._accounts.values()
                 if account.get("status") not in {"禁用", "异常"}
+                   and self._account_matches_group(account)
                    and (
                        route is None
                        or self._normalize_account_type(account.get("type")) in route.account_types
@@ -1188,6 +1199,24 @@ class AccountService:
             log_service.add(LOG_TYPE_ACCOUNT, f"新增 {added} 个账号，跳过 {skipped} 个",
                             {"added": added, "skipped": skipped})
         return {"added": added, "skipped": skipped, "items": items}
+
+    def set_account_group(self, group_id: str, tokens: list[str] | None = None, *, all_accounts: bool = False) -> dict:
+        target = str(group_id or "").strip()
+        with self._lock:
+            if all_accounts:
+                targets = list(self._accounts.keys())
+            else:
+                resolved = {self._resolve_access_token_locked(token) for token in (tokens or []) if token}
+                targets = [token for token in resolved if token in self._accounts]
+            for token in targets:
+                account = dict(self._accounts[token])
+                account["group_id"] = target
+                self._accounts[token] = account
+            self._save_accounts()
+        result = {"updated": len(targets), "group_id": target}
+        result["items"] = self.list_accounts()
+        log_service.add(LOG_TYPE_ACCOUNT, f"设置分组：{len(targets)} 个账号 → {target or '未分组'}", result)
+        return result
 
     def delete_accounts(self, tokens: list[str]) -> dict:
         target_set = set(token for token in tokens if token)

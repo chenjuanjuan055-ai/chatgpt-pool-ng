@@ -7,6 +7,7 @@ from fastapi import HTTPException, Request
 
 from services.account_service import account_service
 from services.auth_service import auth_service
+from services.request_context import set_request_group
 from services.config import config
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -32,6 +33,7 @@ def require_identity(authorization: str | None) -> dict[str, object]:
     identity = _legacy_admin_identity(token) or auth_service.authenticate(token)
     if identity is None:
         raise HTTPException(status_code=401, detail={"error": "密钥无效或已失效，请重新登录"})
+    set_request_group(identity.get("group_id") if isinstance(identity, dict) else "")
     return identity
 
 

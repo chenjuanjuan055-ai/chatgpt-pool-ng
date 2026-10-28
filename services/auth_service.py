@@ -55,6 +55,7 @@ class AuthService:
             "name": name,
             "role": role,
             "key_hash": key_hash,
+            "group_id": self._clean(raw.get("group_id")),
             "enabled": bool(raw.get("enabled", True)),
             "created_at": created_at,
             "last_used_at": last_used_at,
@@ -81,6 +82,7 @@ class AuthService:
             "id": item.get("id"),
             "name": item.get("name"),
             "role": item.get("role"),
+            "group_id": item.get("group_id") or "",
             "enabled": bool(item.get("enabled", True)),
             "created_at": item.get("created_at"),
             "last_used_at": item.get("last_used_at"),
@@ -147,7 +149,7 @@ class AuthService:
             raise ValueError("这个名称已经在使用中了，换一个更容易区分的名称吧")
         return candidate
 
-    def create_key(self, *, role: AuthRole, name: str = "") -> tuple[dict[str, object], str]:
+    def create_key(self, *, role: AuthRole, name: str = "", group_id: str = "") -> tuple[dict[str, object], str]:
         with self._lock:
             self._reload_locked()
             normalized_name = self._build_name_locked(name, role=role)
@@ -163,6 +165,7 @@ class AuthService:
                 "name": normalized_name,
                 "role": role,
                 "key_hash": key_hash,
+                "group_id": self._clean(group_id),
                 "enabled": True,
                 "created_at": _now_iso(),
                 "last_used_at": None,
@@ -198,6 +201,8 @@ class AuthService:
                     )
                 if "enabled" in updates and updates.get("enabled") is not None:
                     next_item["enabled"] = bool(updates.get("enabled"))
+                if "group_id" in updates and updates.get("group_id") is not None:
+                    next_item["group_id"] = self._clean(updates.get("group_id"))
                 if "key" in updates and updates.get("key") is not None:
                     next_item["key_hash"] = self._build_key_hash_locked(str(updates.get("key") or ""), exclude_id=normalized_id)
                 self._items[index] = next_item

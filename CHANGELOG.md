@@ -27,6 +27,19 @@
 + [新增] 单元测试 `test/test_observability.py`（错误分类 + 指标聚合 + 告警判定 + 日志轮转）。
 + [新增] 文档 `docs/observability.md`。
 
+### 账号分组（M2+）
++ [新增] 账号分组：`GET/POST /api/account-groups`、`POST /api/account-groups/{id}`、`DELETE /api/account-groups/{id}`；账号通过 `POST /api/accounts/group` 批量归组（tokens 或 all）。
++ [新增] 用户密钥可绑定分组（创建/更新带 `group_id`）；请求携带该密钥时，选号只会在同组账号内进行（管理员密钥不受限）。
++ [新增] 分组配置持久化在 `config.json -> account_groups`；账号新增 `group_id` 字段。
++ [新增] 单元测试 `test/test_account_groups.py`。
+
+### 模型目录（M1+）
++ [新增] `GET /api/model-catalog`：统一对话/图片模型清单、默认模型、能力（高清图、放大开关、图片上游 slug）、来源与 revision。
++ [新增] 配置 `model_catalog`：chat_models / image_models 覆盖、image_upstream_model（默认 gpt-5-3）、image_thinking_effort、image_upscale_enabled。
++ [新增] 图片模型族扩展：`gpt-image-2.5`、`-flare`、`-sunburst`；gpt-image-2 → 配置的上游 slug（默认 gpt-5-3），2.5 系列 → auto。
++ [新增] `/v1/models` 展示全部已配置的网页图片模型。
++ [新增] 单元测试 `test/test_model_catalog.py`。
+
 ### 面板（M4）
 + [新增] 新页面 `/monitor`（顶部导航「监控」）：账号健康卡片（总数/健康/死号/仅 AT + 状态分布 + 预览/清理死号按钮）、出口池表格（状态/延迟/连续失败/冷却剩余/最近错误 + 立即探活）、请求指标（成功率/RPM/P50/P95/失败数）、按模型统计、错误分类、最近失败列表；每 30 秒自动刷新。
 + [新增] 前端 API 封装：`fetchEgressPool` / `probeEgressPool` / `fetchAccountHealth` / `cleanupDeadAccounts` / `fetchMetricsSummary`。

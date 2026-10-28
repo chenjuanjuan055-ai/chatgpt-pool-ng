@@ -22,6 +22,7 @@ from api.support import (
     sanitize_sub2api_server,
     sanitize_sub2api_servers,
 )
+from services.account_groups import create_group, delete_group, list_groups, update_group
 from services.account_health import analyze_accounts, classify_account, filter_import_payloads
 from services.account_service import account_service
 from services.cpa_service import cpa_config, cpa_import_service, list_remote_files
@@ -37,18 +38,37 @@ from services.sub2api_service import (
 
 class UserKeyCreateRequest(BaseModel):
     name: str = ""
+    group_id: str = ""
 
 
 class UserKeyUpdateRequest(BaseModel):
     name: str | None = None
     enabled: bool | None = None
     key: str | None = None
+    group_id: str | None = None
 
 
 class AccountCreateRequest(BaseModel):
     tokens: list[str] = Field(default_factory=list)
     accounts: list[dict[str, Any]] = Field(default_factory=list)
     allow_access_token_only: bool = False
+
+
+class AccountGroupAssignRequest(BaseModel):
+    group_id: str = ""
+    tokens: list[str] = Field(default_factory=list)
+    all: bool = False
+
+
+class AccountGroupCreateRequest(BaseModel):
+    name: str = ""
+    description: str = ""
+
+
+class AccountGroupUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    enabled: bool | None = None
 
 
 class AccountCleanupRequest(BaseModel):
@@ -176,7 +196,7 @@ def create_router() -> APIRouter:
     async def create_user_key(body: UserKeyCreateRequest, authorization: str | None = Header(default=None)):
         require_admin(authorization)
         try:
-            item, raw_key = auth_service.create_key(role="user", name=body.name)
+            item, raw_key = auth_service.create_key(role="user", name=body.name, group_id=body.group_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
         return {"item": item, "key": raw_key, "items": auth_service.list_keys(role="user")}
@@ -194,6 +214,7 @@ def create_router() -> APIRouter:
                 "name": body.name,
                 "enabled": body.enabled,
                 "key": body.key,
+                "group_id": body.group_id,
             }.items()
             if value is not None
         }
@@ -260,6 +281,55 @@ def create_router() -> APIRouter:
             "errors": refresh_result.get("errors", []),
             "items": refresh_result.get("items", result.get("items", [])),
         }
+
+    @router.get("/api/account-groups")
+    async def list_account_groups(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return {"items": list_groups()}
+
+    @router.post("/api/account-groups")
+    async def create_account_group(body: AccountGroupCreateRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            group = create_group(body.name, body.description)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+        return {"item": group, "items": list_groups()}
+
+    @router.post("/api/account-groups/{group_id}")
+    async def update_account_group(
+            group_id: str,
+            body: AccountGroupUpdateRequest,
+            authorization: str | None = Header(default=None),
+    ):
+        require_admin(authorization)
+        updates = {key: value for key, value in body.model_dump().items() if value is not None}
+        if not updates:
+            raise HTTPException(status_code=400, detail={"error": "还没有检测到改动"})
+        try:
+            group = update_group(group_id, updates)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+        if group is None:
+            raise HTTPException(status_code=404, detail={"error": "分组不存在"})
+        return {"item": group, "items": list_groups()}
+
+    @router.delete("/api/account-groups/{group_id}")
+    async def delete_account_group(group_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        if not delete_group(group_id):
+            raise HTTPException(status_code=404, detail={"error": "分组不存在"})
+        return {"items": list_groups()}
+
+    @router.post("/api/accounts/group")
+    async def assign_accounts_group(body: AccountGroupAssignRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        if body.group_id and not any(group["id"] == body.group_id for group in list_groups()):
+            raise HTTPException(status_code=404, detail={"error": "分组不存在"})
+        if not body.all and not body.tokens:
+            raise HTTPException(status_code=400, detail={"error": "请选择账号或传入 all=true"})
+        result = account_service.set_account_group(body.group_id, body.tokens, all_accounts=body.all)
+        return result
 
     @router.get("/api/accounts/health-summary")
     async def accounts_health_summary(authorization: str | None = Header(default=None)):

@@ -16,6 +16,8 @@ CONFIG_FILE = BASE_DIR / "config.json"
 VERSION_FILE = BASE_DIR / "VERSION"
 BACKUP_STATE_FILE = DATA_DIR / "backup_state.json"
 
+DEFAULT_ACCOUNT_GROUPS: list = []
+
 DEFAULT_MODEL_CATALOG = {
     "chat_models": [],
     "image_models": [],
@@ -23,6 +25,22 @@ DEFAULT_MODEL_CATALOG = {
     "image_upstream_model": "gpt-5-3",
     "image_thinking_effort": "",
 }
+
+
+def _normalize_account_group(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    group_id = str(value.get("id") or "").strip()
+    name = str(value.get("name") or "").strip()
+    if not group_id or not name:
+        return None
+    return {
+        "id": group_id,
+        "name": name,
+        "description": str(value.get("description") or "").strip(),
+        "enabled": _normalize_bool(value.get("enabled"), True),
+        "created_at": value.get("created_at"),
+    }
 
 
 def _normalize_string_list(value: object) -> list[str]:
@@ -725,6 +743,7 @@ class ConfigStore:
         data["backup"] = self.get_backup_settings()
         data["alerts"] = self.get_alert_settings()
         data["model_catalog"] = self.get_model_catalog_settings()
+        data["account_groups"] = self.get_account_groups_settings()
         data["image_storage"] = self.get_image_storage_settings()
         data["chat_completion_cache"] = self.get_chat_completion_cache_settings()
         data["proxy_runtime"] = self.get_public_proxy_runtime_settings()
@@ -758,6 +777,10 @@ class ConfigStore:
         next_data.update(dict(data or {}))
         if "backup" in next_data:
             next_data["backup"] = _normalize_backup_settings(next_data.get("backup"))
+        if "account_groups" in next_data:
+            next_data["account_groups"] = [
+                group for group in (_normalize_account_group(item) for item in (next_data.get("account_groups") or []) if isinstance(next_data.get("account_groups"), list)) if group
+            ]
         if "model_catalog" in next_data:
             next_data["model_catalog"] = _normalize_model_catalog_settings(next_data.get("model_catalog"))
         if "alerts" in next_data:
@@ -795,6 +818,12 @@ class ConfigStore:
         self.data = next_data
         self._save()
         return self.get()
+
+    def get_account_groups_settings(self) -> list[dict[str, object]]:
+        groups = self.data.get("account_groups")
+        if not isinstance(groups, list):
+            return []
+        return [group for group in (_normalize_account_group(item) for item in groups) if group]
 
     def get_model_catalog_settings(self) -> dict[str, object]:
         return _normalize_model_catalog_settings(self.data.get("model_catalog"))
