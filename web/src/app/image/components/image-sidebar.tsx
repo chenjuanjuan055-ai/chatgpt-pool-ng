@@ -67,13 +67,13 @@ export function ImageSidebar({
       <div className="flex h-full min-h-0 flex-col gap-2 py-1 sm:gap-3 sm:py-2">
         {!hideActionButtons && (
           <div className="flex items-center gap-2">
-            <Button className="h-10 flex-1 rounded-xl bg-stone-950 text-white hover:bg-stone-800" onClick={onCreateDraft}>
+            <Button className="h-10 flex-1 rounded-xl" onClick={onCreateDraft}>
               <MessageSquarePlus className="size-4" />
               新建对话
             </Button>
             <Button
               variant="outline"
-              className="h-10 rounded-xl border-stone-200 bg-white/85 px-3 text-stone-600 hover:bg-white"
+              className="h-10 rounded-xl border-border bg-card px-3 text-muted-foreground hover:bg-accent"
               onClick={() => void onClearHistory()}
               disabled={conversations.length === 0}
             >
