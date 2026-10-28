@@ -244,7 +244,7 @@ export function ImageComposer({
                     event.stopPropagation();
                     onRemoveReferenceImage(index);
                   }}
-                  className="absolute -right-1 -top-1 inline-flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition hover:border-border hover:text-stone-800"
+                  className="absolute -right-1 -top-1 inline-flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition hover:border-border hover:text-foreground/85"
                   aria-label={`移除参考图 ${image.name || index + 1}`}
                 >
                   <X className="size-3" />
@@ -293,7 +293,7 @@ export function ImageComposer({
                   void onSubmit();
                 }
               }}
-              className="min-h-[82px] resize-none rounded-[24px] border-0 bg-transparent px-4 pt-4 pb-2 text-[15px] leading-6 text-foreground shadow-none placeholder:text-stone-400 focus-visible:ring-0 dark:text-stone-100 dark:placeholder:text-muted-foreground sm:min-h-[148px] sm:rounded-[32px] sm:px-6 sm:pt-6 sm:pb-20 sm:leading-7"
+              className="min-h-[82px] resize-none rounded-[24px] border-0 bg-transparent px-4 pt-4 pb-2 text-[15px] leading-6 text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-0 dark:text-stone-100 dark:placeholder:text-muted-foreground sm:min-h-[148px] sm:rounded-[32px] sm:px-6 sm:pt-6 sm:pb-20 sm:leading-7"
             />
             {isDraggingImage ? (
               <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[24px] border-2 border-dashed border-stone-900 bg-card/85 text-sm font-medium text-foreground backdrop-blur-[1px] sm:rounded-[32px]">
@@ -346,7 +346,7 @@ export function ImageComposer({
                     {isSizeMenuOpen ? (
                       <div
                         ref={sizeMenuRef}
-                        className="fixed z-[80] max-h-[62dvh] overflow-y-auto rounded-[24px] border border-border/70 bg-card p-4 shadow-[0_30px_90px_-34px_rgba(15,23,42,0.42)] sm:max-h-none sm:overflow-visible"
+                        className="fixed z-[80] max-h-[62dvh] overflow-y-auto rounded-[24px] border border-border bg-card p-4 shadow-xl sm:max-h-none sm:overflow-visible"
                         style={{
                           top: sizeMenuPos.top,
                           left: sizeMenuPos.left,
@@ -403,8 +403,8 @@ export function ImageComposer({
                                   key={option.value}
                                   type="button"
                                   className={cn(
-                                    "h-9 cursor-pointer rounded-full border border-border bg-card text-sm text-stone-800 transition hover:border-border hover:bg-muted",
-                                    active && "border-stone-950 bg-card font-medium text-foreground",
+                                    "h-9 cursor-pointer rounded-full border border-border bg-card text-sm text-foreground/80 transition hover:border-primary/40 hover:bg-accent",
+                                    active && "border-primary bg-primary/10 font-medium text-primary",
                                   )}
                                   onClick={() => onImageQualityChange(option.value)}
                                 >
@@ -416,7 +416,7 @@ export function ImageComposer({
                         </div>
                         <div className="mb-3">
                           <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                            尺寸 <Info className="size-3.5 text-stone-400" />
+                            尺寸 <Info className="size-3.5 text-muted-foreground" />
                           </div>
                           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                             <div className="flex items-center rounded-lg bg-muted px-3 py-1.5 text-sm text-foreground/75">
@@ -427,10 +427,10 @@ export function ImageComposer({
                                 min="1"
                                 value={imageWidth}
                                 onChange={(event) => onImageWidthChange(event.target.value)}
-                                className="h-7 border-0 bg-transparent px-0 text-sm font-medium text-stone-800 shadow-none focus-visible:ring-0"
+                                className="h-7 border-0 bg-transparent px-0 text-sm font-medium text-foreground/85 shadow-none focus-visible:ring-0"
                               />
                             </div>
-                            <span className="text-stone-400">×</span>
+                            <span className="text-muted-foreground">×</span>
                             <div className="flex items-center rounded-lg bg-muted px-3 py-1.5 text-sm text-foreground/75">
                               <span className="mr-2 text-muted-foreground">H</span>
                               <Input
@@ -439,14 +439,14 @@ export function ImageComposer({
                                 min="1"
                                 value={imageHeight}
                                 onChange={(event) => onImageHeightChange(event.target.value)}
-                                className="h-7 border-0 bg-transparent px-0 text-sm font-medium text-stone-800 shadow-none focus-visible:ring-0"
+                                className="h-7 border-0 bg-transparent px-0 text-sm font-medium text-foreground/85 shadow-none focus-visible:ring-0"
                               />
                             </div>
                           </div>
                         </div>
                         <div className="mb-3">
                           <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                            宽高比 <Info className="size-3.5 text-stone-400" />
+                            宽高比 <Info className="size-3.5 text-muted-foreground" />
                           </div>
                           <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
                             {aspectOptions.map((option) => {
@@ -459,9 +459,9 @@ export function ImageComposer({
                                   type="button"
                                   disabled={disabled}
                                   className={cn(
-                                    "flex h-[64px] cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-card text-sm text-stone-800 transition hover:border-border hover:bg-muted",
-                                    active && "border-stone-950",
-                                    disabled && "cursor-not-allowed border-border bg-muted text-stone-300 hover:border-border hover:bg-muted",
+                                    "flex h-[64px] cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-card text-sm text-foreground/80 transition hover:border-primary/40 hover:bg-accent",
+                                    active && "border-primary bg-primary/10 text-primary",
+                                    disabled && "cursor-not-allowed border-border bg-muted text-muted-foreground/50 hover:border-border hover:bg-muted",
                                   )}
                                   onClick={() => {
                                     if (disabled) {
@@ -496,8 +496,8 @@ export function ImageComposer({
                                   key={option}
                                   type="button"
                                   className={cn(
-                                    "h-9 cursor-pointer rounded-full border border-border bg-card text-sm text-stone-800 transition hover:border-border hover:bg-muted",
-                                    active && "border-stone-950 bg-card font-medium text-foreground",
+                                    "h-9 cursor-pointer rounded-full border border-border bg-card text-sm text-foreground/80 transition hover:border-primary/40 hover:bg-accent",
+                                    active && "border-primary bg-primary/10 font-medium text-primary",
                                   )}
                                   onClick={() => onImageCountChange(option)}
                                 >
@@ -513,7 +513,7 @@ export function ImageComposer({
                               step="1"
                               value={imageCount}
                               onChange={(event) => onImageCountChange(event.target.value)}
-                              className="h-9 rounded-full border-border bg-card px-3 text-center text-sm font-medium text-stone-800 shadow-none focus-visible:ring-0"
+                              className="h-9 rounded-full border-border bg-card px-3 text-center text-sm font-medium text-foreground/85 shadow-none focus-visible:ring-0"
                             />
                           </div>
                         </div>
@@ -527,7 +527,7 @@ export function ImageComposer({
                   type="button"
                   onClick={() => void onSubmit()}
                   disabled={!prompt.trim()}
-                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:size-11"
+                  className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground sm:size-11"
                   aria-label={referenceImages.length > 0 ? "编辑图片" : "生成图片"}
                 >
                   <ArrowUp className="size-3.5 sm:size-4" />
