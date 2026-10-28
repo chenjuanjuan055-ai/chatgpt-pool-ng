@@ -2,13 +2,41 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Menu } from "lucide-react";
+import {
+  Activity,
+  Bug,
+  Image as ImageIcon,
+  Images,
+  LayoutGrid,
+  LogOut,
+  Menu,
+  ScrollText,
+  Settings,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { HeaderActions } from "@/components/header-actions";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import webConfig from "@/constants/common-env";
 import { fetchThirdPartyApps, type ThirdPartyAppsSettings } from "@/lib/api";
 import { getValidatedAuthSession } from "@/lib/auth-session";
@@ -16,16 +44,16 @@ import { cn } from "@/lib/utils";
 import { clearStoredAuthSession, type StoredAuthSession } from "@/store/auth";
 
 const adminNavItems = [
-  { href: "/image", label: "生图" },
-  { href: "/accounts", label: "号池管理" },
-  { href: "/image-manager", label: "图片管理" },
-  { href: "/logs", label: "日志管理" },
-  { href: "/monitor", label: "监控" },
-  { href: "/debug", label: "调试" },
-  { href: "/settings", label: "设置" },
+  { href: "/image", label: "生图", icon: ImageIcon },
+  { href: "/accounts", label: "号池管理", icon: Users },
+  { href: "/image-manager", label: "图片管理", icon: Images },
+  { href: "/logs", label: "日志管理", icon: ScrollText },
+  { href: "/monitor", label: "监控", icon: Activity },
+  { href: "/debug", label: "调试", icon: Bug },
+  { href: "/settings", label: "设置", icon: Settings },
 ];
 
-const userNavItems = [{ href: "/image", label: "画图" }];
+const userNavItems = [{ href: "/image", label: "画图", icon: ImageIcon }];
 
 function buildThirdPartyHref(appUrl: string, baseUrl: string, apiKey: string) {
   const url = appUrl.trim();
@@ -48,23 +76,14 @@ export function TopNav() {
 
   useEffect(() => {
     let active = true;
-
     const load = async () => {
       if (pathname === "/login") {
-        if (!active) {
-          return;
-        }
-        setSession(null);
+        if (active) setSession(null);
         return;
       }
-
       const storedSession = await getValidatedAuthSession();
-      if (!active) {
-        return;
-      }
-      setSession(storedSession);
+      if (active) setSession(storedSession);
     };
-
     void load();
     return () => {
       active = false;
@@ -80,17 +99,12 @@ export function TopNav() {
     const load = async () => {
       try {
         const data = await fetchThirdPartyApps();
-        if (active) {
-          setThirdPartyApps(data.third_party_apps);
-        }
+        if (active) setThirdPartyApps(data.third_party_apps);
       } catch {
-        if (active) {
-          setThirdPartyApps(null);
-        }
+        if (active) setThirdPartyApps(null);
       }
     };
     const reload = () => void load();
-
     void load();
     window.addEventListener("third-party-apps-updated", reload);
     return () => {
@@ -116,123 +130,118 @@ export function TopNav() {
   const canvasHref = canvas?.enabled && canvas.url.trim() ? buildThirdPartyHref(canvas.url, baseUrl, session.key) : "";
   const canvasDisplayHref = canvasHref ? decodeURIComponent(canvasHref) : "";
 
-  const handleCanvasOpen = () => {
-    if (!canvasHref) {
-      return;
-    }
-    setIsCanvasDialogOpen(true);
-  };
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
+  const handleCanvasOpen = () => {
+    if (canvasHref) setIsCanvasDialogOpen(true);
+  };
   const confirmCanvasOpen = () => {
-    if (canvasHref) {
-      window.open(canvasHref, "_blank", "noopener,noreferrer");
-    }
+    if (canvasHref) window.open(canvasHref, "_blank", "noopener,noreferrer");
     setIsCanvasDialogOpen(false);
   };
 
+  const navLinkClass = (active: boolean) =>
+    cn(
+      "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+      active
+        ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+        : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+    );
+
   return (
     <>
-      <header className="border-b border-stone-100/50 dark:border-white/10">
-        <div className="flex min-h-12 flex-col gap-1 px-3 py-2 sm:h-12 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 sm:py-0">
-          <div className="flex items-center justify-between gap-2 sm:justify-start sm:gap-3">
-            <Sheet>
-              <SheetTrigger className="inline-flex size-8 items-center justify-center text-stone-700 transition hover:text-stone-950 sm:hidden dark:text-stone-200 dark:hover:text-white">
-                <Menu className="size-4" />
-                <span className="sr-only">打开导航</span>
-              </SheetTrigger>
-              <SheetContent side="left">
-                <SheetHeader>
-                  <SheetTitle>chatgpt2api</SheetTitle>
-                  <span className="text-xs text-stone-500 dark:text-stone-400">{roleLabel} · {displayName}</span>
-                </SheetHeader>
-                <nav className="mt-8 flex flex-col gap-1">
-                  {canvasHref ? (
-                    <SheetClose asChild>
-                      <button
-                        type="button"
-                        className="flex items-center rounded-xl px-3 py-2.5 text-left text-sm font-medium text-stone-600 transition hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white"
-                        onClick={handleCanvasOpen}
-                      >
-                        无限画布
-                      </button>
-                    </SheetClose>
-                  ) : null}
-                  {navItems.map((item) => {
-                    const active = pathname === item.href;
-                    const className = cn(
-                      "flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition",
-                      active ? "bg-stone-950 text-white dark:bg-white dark:text-stone-950" : "text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white",
-                    );
-                    return (
-                      <SheetClose asChild key={item.href}>
-                        <Link href={item.href} className={className}>{item.label}</Link>
-                      </SheetClose>
-                    );
-                  })}
-                </nav>
-                <SheetFooter>
-                  <button
-                    type="button"
-                    className="rounded-xl border border-stone-200 px-3 py-2.5 text-left text-sm font-medium text-stone-500 transition hover:text-stone-950 dark:border-white/10 dark:text-stone-300 dark:hover:text-white"
-                    onClick={() => void handleLogout()}
-                  >
-                    退出
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border/70 bg-background/85 px-4 backdrop-blur md:hidden">
+        <Sheet>
+          <SheetTrigger className="inline-flex size-9 items-center justify-center rounded-lg text-foreground/80 transition hover:bg-accent hover:text-foreground">
+            <Menu className="size-5" />
+            <span className="sr-only">打开导航</span>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 bg-sidebar text-sidebar-foreground">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-2 text-sidebar-foreground">
+                <span className="grid size-8 place-items-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
+                  <Sparkles className="size-4" />
+                </span>
+                ChatGPT 号池
+              </SheetTitle>
+            </SheetHeader>
+            <nav className="mt-6 flex flex-col gap-1">
+              {canvasHref ? (
+                <SheetClose asChild>
+                  <button type="button" className={navLinkClass(false)} onClick={handleCanvasOpen}>
+                    <LayoutGrid className="size-4" /> 无限画布
                   </button>
-                </SheetFooter>
-              </SheetContent>
-            </Sheet>
-            <Link
-              href="/image"
-              className="shrink-0 py-1 text-[15px] font-bold tracking-tight text-stone-950 transition hover:text-stone-700 dark:text-stone-50 dark:hover:text-white"
-            >
-              chatgpt2api
-            </Link>
-            <HeaderActions className="ml-auto sm:hidden" showGithubText={false} />
-          </div>
-          <nav className="hide-scrollbar -mx-1 hidden min-w-0 flex-1 gap-1 overflow-x-auto px-1 sm:mx-0 sm:flex sm:justify-center sm:gap-8 sm:overflow-visible sm:px-0">
-            {canvasHref ? (
+                </SheetClose>
+              ) : null}
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <SheetClose asChild key={item.href}>
+                    <Link href={item.href} className={navLinkClass(isActive(item.href))}>
+                      <Icon className="size-4" /> {item.label}
+                    </Link>
+                  </SheetClose>
+                );
+              })}
+            </nav>
+            <SheetFooter>
               <button
                 type="button"
-                onClick={handleCanvasOpen}
-                className="relative shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[13px] font-medium text-stone-500 transition hover:text-stone-900 sm:rounded-none sm:px-0 sm:text-[15px] dark:text-stone-400 dark:hover:text-stone-100"
+                className="flex items-center gap-2 rounded-xl border border-sidebar-border px-3 py-2 text-left text-sm text-sidebar-foreground/80"
+                onClick={() => void handleLogout()}
               >
-                无限画布
+                <LogOut className="size-4" /> 退出
               </button>
-            ) : null}
-            {navItems.map((item) => {
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "relative shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-[13px] font-medium transition sm:rounded-none sm:px-0 sm:text-[15px]",
-                    active
-                      ? "bg-stone-950 text-white sm:bg-transparent sm:font-semibold sm:text-stone-950 dark:bg-white dark:text-stone-950 dark:sm:bg-transparent dark:sm:text-white"
-                      : "text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100",
-                  )}
-                >
-                  {item.label}
-                  {active ? <span className="absolute inset-x-0 -bottom-[1px] hidden h-0.5 bg-stone-950 dark:bg-white sm:block" /> : null}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="hidden items-center justify-end gap-2 sm:flex sm:gap-3">
-            <HeaderActions />
-            <span className="hidden rounded-md bg-stone-100 px-2 py-1 text-[10px] font-medium text-stone-500 dark:bg-white/8 dark:text-stone-300 sm:inline-block sm:text-[11px]">
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+        <Link href="/image" className="text-[15px] font-semibold tracking-tight">
+          ChatGPT 号池
+        </Link>
+        <HeaderActions className="ml-auto" />
+      </header>
+
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
+        <div className="flex h-16 items-center gap-2.5 px-5">
+          <span className="grid size-8 place-items-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+            <Sparkles className="size-4" />
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight">ChatGPT 号池</span>
+        </div>
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+          {canvasHref ? (
+            <button type="button" className={cn(navLinkClass(false), "w-full")} onClick={handleCanvasOpen}>
+              <LayoutGrid className="size-4" /> 无限画布
+            </button>
+          ) : null}
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link key={item.href} href={item.href} className={navLinkClass(isActive(item.href))}>
+                <Icon className="size-4" /> {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="mx-3 mb-2 h-8 rounded-lg" aria-hidden="true" />
+        <div className="border-t border-sidebar-border px-4 py-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <span className="truncate text-xs text-sidebar-foreground/70">
               {roleLabel} · {displayName}
             </span>
             <button
               type="button"
-              className="py-1 text-xs text-stone-400 transition hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 sm:text-sm"
+              className="rounded-lg p-1.5 text-sidebar-foreground/60 transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               onClick={() => void handleLogout()}
+              aria-label="退出"
             >
-              退出
+              <LogOut className="size-4" />
             </button>
           </div>
+          <HeaderActions className="[&_a]:text-sidebar-foreground/70 [&_a:hover]:text-sidebar-foreground" />
         </div>
-      </header>
+      </aside>
+
       <Dialog open={isCanvasDialogOpen} onOpenChange={setIsCanvasDialogOpen}>
         <DialogContent showCloseButton={false} className="rounded-2xl p-6">
           <DialogHeader className="gap-2">
@@ -242,18 +251,18 @@ export function TopNav() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <div className="text-xs font-medium text-stone-500">完整跳转地址</div>
-            <div className="max-h-28 overflow-auto break-all rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 font-mono text-xs leading-5 text-stone-700">
+            <div className="text-xs font-medium text-muted-foreground">完整跳转地址</div>
+            <div className="max-h-28 overflow-auto break-all rounded-xl border bg-muted px-3 py-2 font-mono text-xs leading-5">
               {canvasDisplayHref}
             </div>
           </div>
           <DialogFooter className="pt-2">
             <DialogClose asChild>
-              <Button type="button" variant="outline" className="rounded-xl border-stone-200 bg-white text-stone-700">
+              <Button type="button" variant="outline" className="rounded-xl">
                 取消
               </Button>
             </DialogClose>
-            <Button type="button" className="rounded-xl bg-stone-950 text-white hover:bg-stone-800" onClick={confirmCanvasOpen}>
+            <Button type="button" className="rounded-xl" onClick={confirmCanvasOpen}>
               继续跳转
             </Button>
           </DialogFooter>
