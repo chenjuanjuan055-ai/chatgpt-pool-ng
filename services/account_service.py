@@ -358,7 +358,7 @@ class AccountService:
         from curl_cffi import requests
         from services.proxy_service import proxy_settings
 
-        session = requests.Session(**proxy_settings.build_session_kwargs(account=account, impersonate="chrome110", verify=True))
+        session = requests.Session(**proxy_settings.build_session_kwargs(account=account, impersonate="chrome110", verify=True, upstream=True))
         try:
             response = session.post(
                 self._OAUTH_TOKEN_URL,
@@ -596,11 +596,11 @@ class AccountService:
         platform_oauth_redirect_uri = "https://platform.openai.com/auth/callback"
         user_agent = self._OAUTH_USER_AGENT
         
-        # 创建 session
+        # 创建 session（走上游出口：运行时/出口池/旧全局代理）
+        from services.proxy_service import proxy_settings
+
         session_kwargs = {"impersonate": "chrome110", "verify": False}
-        proxy = config.get_proxy_settings()
-        if proxy:
-            session_kwargs["proxy"] = proxy
+        session_kwargs.update(proxy_settings.build_session_kwargs(upstream=True))
         session = requests.Session(**session_kwargs)
         
         try:
