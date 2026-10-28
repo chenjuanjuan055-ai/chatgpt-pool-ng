@@ -15,7 +15,6 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from services.auth_service import auth_service
-
 from api.support import (
     require_admin,
     sanitize_cpa_pool,
@@ -23,6 +22,7 @@ from api.support import (
     sanitize_sub2api_server,
     sanitize_sub2api_servers,
 )
+from services.account_health import analyze_accounts, classify_account, filter_import_payloads
 from services.account_service import account_service
 from services.cpa_service import cpa_config, cpa_import_service, list_remote_files
 from services.oauth_login_service import OAuthLoginError, oauth_login_service
@@ -48,6 +48,13 @@ class UserKeyUpdateRequest(BaseModel):
 class AccountCreateRequest(BaseModel):
     tokens: list[str] = Field(default_factory=list)
     accounts: list[dict[str, Any]] = Field(default_factory=list)
+    allow_access_token_only: bool = False
+
+
+class AccountCleanupRequest(BaseModel):
+    apply: bool = False
+    statuses: list[str] = Field(default_factory=list)
+    include_at_only: bool = False
 
 
 class AccountDeleteRequest(BaseModel):
@@ -216,13 +223,28 @@ def create_router() -> APIRouter:
     async def create_accounts(body: AccountCreateRequest, authorization: str | None = Header(default=None)):
         require_admin(authorization)
         account_payloads = [item for item in body.accounts if isinstance(item, dict)]
-        payload_tokens = [_account_payload_token(item) for item in account_payloads]
-        tokens = _unique_tokens([*body.tokens, *payload_tokens])
+        accepted_payloads: list[dict[str, Any]] = []
+        rejected: list[dict[str, Any]] = []
+        if account_payloads:
+            accepted_payloads, rejected = filter_import_payloads(account_payloads)
+        if body.tokens and not body.allow_access_token_only:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "仅 access_token 导入已禁用：没有 refresh_token 的号在 AT 过期后无法续期，"
+                             "会在数天内全部失效。请改用 OAuth / CPA / sub2api 导入；"
+                             "确需导入请显式传 allow_access_token_only=true。",
+                    "rejected_tokens": len(_unique_tokens(body.tokens)),
+                },
+            )
+        tokens = _unique_tokens([*body.tokens, *[_account_payload_token(item) for item in accepted_payloads]])
+        if not tokens and rejected:
+            return {"added": 0, "skipped": 0, "rejected": rejected, "items": account_service.list_accounts()}
         if not tokens:
             raise HTTPException(status_code=400, detail={"error": "tokens is required"})
-        if account_payloads:
-            result = account_service.add_account_items(account_payloads)
-            payload_token_set = set(_unique_tokens(payload_tokens))
+        if accepted_payloads:
+            result = account_service.add_account_items(accepted_payloads)
+            payload_token_set = set(_unique_tokens([_account_payload_token(item) for item in accepted_payloads]))
             extra_tokens = [token for token in tokens if token not in payload_token_set]
             if extra_tokens:
                 extra_result = account_service.add_accounts(extra_tokens)
@@ -233,9 +255,55 @@ def create_router() -> APIRouter:
         refresh_result = account_service.refresh_accounts(tokens)
         return {
             **result,
+            "rejected": rejected,
             "refreshed": refresh_result.get("refreshed", 0),
             "errors": refresh_result.get("errors", []),
             "items": refresh_result.get("items", result.get("items", [])),
+        }
+
+    @router.get("/api/accounts/health-summary")
+    async def accounts_health_summary(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return analyze_accounts(account_service.list_accounts())
+
+    @router.post("/api/accounts/cleanup-dead")
+    async def cleanup_dead_accounts(body: AccountCleanupRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        accounts = account_service.list_accounts()
+        statuses = set(body.statuses or ())
+        if not statuses:
+            statuses = {"at_expired_no_rt", "refresh_invalid", "missing_at"}
+        if body.include_at_only:
+            statuses.add("at_only")
+        targets = []
+        for account in accounts:
+            record = classify_account(account)
+            if record["status"] in statuses:
+                token = str(account.get("access_token") or "")
+                targets.append(
+                    {
+                        "access_token": token,
+                        "email": account.get("email") or "",
+                        "status": record["status"],
+                        "label": record["label"],
+                        "created_at": account.get("created_at"),
+                        "last_used_at": account.get("last_used_at"),
+                    }
+                )
+        preview = [
+            {**item, "access_token": f"{item['access_token'][:6]}…{item['access_token'][-4:]}"}
+            for item in targets
+        ]
+        deleted = 0
+        if body.apply and targets:
+            result = account_service.delete_accounts([item["access_token"] for item in targets])
+            deleted = int(result.get("removed") or 0)
+        return {
+            "matched": len(targets),
+            "deleted": deleted,
+            "applied": body.apply,
+            "statuses": sorted(statuses),
+            "items": preview,
         }
 
     @router.delete("/api/accounts")

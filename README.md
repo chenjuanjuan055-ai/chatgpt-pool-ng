@@ -187,6 +187,7 @@ environment:
 - 支持网页端配置全局 HTTP / HTTPS / SOCKS5 / SOCKS5H 代理
 - 支持 WARP / FlareSolverr 稳定代理运行时
 - 支持出口池：多代理健康探测、延迟选路、故障自动切换与冷却恢复
+- 支持账号健康分类与死号清理：导入强制校验 refresh_token，仅 AT 的批次直接拒绝
 - 支持搜索、筛选、批量刷新、导出、手动编辑和清理账号
 - 支持四种导入方式：本地 CPA JSON 文件导入、远程 CPA 服务器导入、`sub2api` 服务器导入、`access_token` 导入
 - 支持在设置页配置 `sub2api` 服务器，筛选并批量导入其中的 OpenAI OAuth 账号

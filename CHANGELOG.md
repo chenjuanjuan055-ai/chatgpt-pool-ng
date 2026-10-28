@@ -8,6 +8,14 @@
 + [新增] 上游会话接入出口池：`ProxySettingsStore.build_session()` 在出口池启用时返回带自动切换能力的会话对象，主上游请求无需改动调用方。
 + [新增] 单元测试 `test/test_egress_service.py`（选路、冷却、探活、故障切换、非传输错误不重试）。
 
+### 账号治理（M2）
++ [新增] `services/account_health.py`：账号健康分类（ok / expiring / at_only / at_expired_no_rt / refresh_invalid / missing_at / codex_managed），含 JWT exp 解析与 RT 错误识别。
++ [新增] `GET /api/accounts/health-summary`：总数、健康/死号/仅 AT 数量、状态分布、账号年龄段、死号与仅 AT 样本（令牌脱敏）。
++ [新增] `POST /api/accounts/cleanup-dead`：预览/执行死号清理，可选把“仅 AT”的高危号一并清掉。
++ [变更] `POST /api/accounts` 导入校验：缺少 refresh_token 的 web 号直接拒绝并返回原因；裸 access_token 列表默认拒绝（需显式 `allow_access_token_only=true`）；Codex/CPA 号豁免。
++ [新增] 单元测试 `test/test_account_health.py`（14 例）。
++ [新增] 文档 `docs/account-health.md`。
+
 ## 1.8.0 - 2026-07-28
 
 + [新增] 新增默认请求上游模型名称和默认思考强度配置，支持在设置页面修改，并可通过模型名的 `-standard`、`-extended`、`-max` 后缀覆盖思考强度。
