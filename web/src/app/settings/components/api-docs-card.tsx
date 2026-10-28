@@ -92,7 +92,7 @@ const docs: ApiDoc[] = [
     example: (baseUrl: string, key: string) => `curl ${baseUrl}/search \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${key}" \\
-  -d '{"prompt":"搜索 chatgpt2api 最新使用方式"}'`,
+  -d '{"prompt":"搜索 chatgpt-pool-ng 最新使用方式"}'`,
   },
   {
     title: "图片生成",

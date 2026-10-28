@@ -58,7 +58,7 @@ function MarkdownResult({ content }: { content: string }) {
 }
 
 export function SearchPanel() {
-  const [prompt, setPrompt] = useState("帮我搜索 chatgpt2api 相关项目");
+  const [prompt, setPrompt] = useState("帮我搜索 chatgpt-pool-ng 相关项目");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");

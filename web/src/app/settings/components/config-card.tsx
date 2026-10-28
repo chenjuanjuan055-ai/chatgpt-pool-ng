@@ -425,7 +425,7 @@ export function ConfigCard() {
                 <Input
                   value={String(config?.image_storage?.webdav_root_path || "")}
                   onChange={(event) => setImageStorageField("webdav_root_path", event.target.value)}
-                  placeholder="chatgpt2api/images"
+                  placeholder="chatgpt-pool-ng/images"
                   className="h-10 rounded-xl border-stone-200 bg-white"
                   disabled={!config?.image_storage?.enabled}
                 />
@@ -435,7 +435,7 @@ export function ConfigCard() {
                 <Input
                   value={String(config?.image_storage?.public_base_url || "")}
                   onChange={(event) => setImageStorageField("public_base_url", event.target.value)}
-                  placeholder="https://cdn.example.com/chatgpt2api/images"
+                  placeholder="https://cdn.example.com/chatgpt-pool-ng/images"
                   className="h-10 rounded-xl border-stone-200 bg-white"
                   disabled={!config?.image_storage?.enabled}
                 />

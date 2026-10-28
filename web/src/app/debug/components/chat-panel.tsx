@@ -72,7 +72,7 @@ function messageImages(message: ChatMessage): string[] {
 export function ChatPanel() {
   const [model, setModel] = useState("auto");
   const [reasoningEffort, setReasoningEffort] = useState("");
-  const [input, setInput] = useState("你好，先记住我的项目叫 chatgpt2api。");
+  const [input, setInput] = useState("你好，先记住我的项目叫 chatgpt-pool-ng。");
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [raw, setRaw] = useState<ChatCompletionResponse | null>(null);

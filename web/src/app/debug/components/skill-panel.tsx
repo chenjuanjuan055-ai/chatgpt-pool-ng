@@ -22,8 +22,8 @@ export function SkillPanel() {
 
   const apiBaseUrl = configuredBaseUrl || webConfig.apiUrl.replace(/\/$/, "") || browserBaseUrl;
   const skillZh = useMemo(() => `---
-name: chatgpt2api-search
-description: 当用户需要联网搜索、查询最新信息、核实事实或需要来源链接时，调用本地 chatgpt2api 搜索接口。
+name: chatgpt-pool-ng-search
+description: 当用户需要联网搜索、查询最新信息、核实事实或需要来源链接时，调用本地 chatgpt-pool-ng 搜索接口。
 ---
 
 # ChatGPT2API 搜索
@@ -52,13 +52,13 @@ Body:
 - 如果接口报错，简要说明错误并询问是否重试。`, [apiBaseUrl, authKey]);
 
   const skillEn = useMemo(() => `---
-name: chatgpt2api-search
-description: Use when current web search is needed through this chatgpt2api server. Call the configured HTTP search endpoint with a prompt and return the answer with source URLs.
+name: chatgpt-pool-ng-search
+description: Use when current web search is needed through this chatgpt-pool-ng server. Call the configured HTTP search endpoint with a prompt and return the answer with source URLs.
 ---
 
 # ChatGPT2API Search
 
-Use this skill when the user asks for current web search, online lookup, recent information, or source-backed answers. It calls the local chatgpt2api search endpoint and returns an answer with source links.
+Use this skill when the user asks for current web search, online lookup, recent information, or source-backed answers. It calls the local chatgpt-pool-ng search endpoint and returns an answer with source links.
 
 ## When to use
 
@@ -92,7 +92,7 @@ JSON body:
 
 要求：
 1. 请按你当前环境的 skill 安装规范，把它安装成本地 skill。
-2. skill 名称为：chatgpt2api-search
+2. skill 名称为：chatgpt-pool-ng-search
 3. 文件名为：SKILL.md
 4. 如果你无法确定本地 skills 目录在哪里，先告诉我需要放到哪个目录，不要猜路径。
 5. 只创建或更新这个 skill 文件，不要修改其他无关文件。
@@ -108,7 +108,7 @@ ${skillZh}
 
 Requirements:
 1. Install this as a local skill according to the skill installation rules of your current environment.
-2. Skill name: chatgpt2api-search
+2. Skill name: chatgpt-pool-ng-search
 3. File name: SKILL.md
 4. If you cannot determine the local skills directory, tell me which directory is required before writing files.
 5. Only create or update this skill file. Do not modify unrelated files.

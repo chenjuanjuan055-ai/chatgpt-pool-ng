@@ -1,129 +1,29 @@
 # Changelog
 
-## Unreleased
+本项目（ChatGPT 号池 / chatgpt-pool-ng）在 [basketikun/chatgpt2api](https://github.com/basketikun/chatgpt2api) v1.8.0（MIT）基础上二次开发，以下为本项目自己的版本记录。
 
-### 新项目基线（1.9.0-ng）
-+ [变更] 以 MIT 许可的 basketikun/chatgpt2api v1.8.0 为基座，作为新项目起点。
-+ [新增] **出口池（Egress Pool）**：可配置多个出站代理，按健康度与延迟自动选路；传输层失败自动切换下一个出口；连续失败进入冷却，冷却到期自动恢复；后台定时探活，并提供 `GET /api/proxy/egress`、`POST /api/proxy/egress/probe`、`POST /api/proxy/egress/settings` 接口。
-+ [新增] 上游会话接入出口池：`ProxySettingsStore.build_session()` 在出口池启用时返回带自动切换能力的会话对象，主上游请求无需改动调用方。
-+ [新增] 单元测试 `test/test_egress_service.py`（选路、冷却、探活、故障切换、非传输错误不重试）。
+## 1.9.0 - 2026-10-28
 
-### 账号治理（M2）
-+ [新增] `services/account_health.py`：账号健康分类（ok / expiring / at_only / at_expired_no_rt / refresh_invalid / missing_at / codex_managed），含 JWT exp 解析与 RT 错误识别。
-+ [新增] `GET /api/accounts/health-summary`：总数、健康/死号/仅 AT 数量、状态分布、账号年龄段、死号与仅 AT 样本（令牌脱敏）。
-+ [新增] `POST /api/accounts/cleanup-dead`：预览/执行死号清理，可选把“仅 AT”的高危号一并清掉。
-+ [变更] `POST /api/accounts` 导入校验：缺少 refresh_token 的 web 号直接拒绝并返回原因；裸 access_token 列表默认拒绝（需显式 `allow_access_token_only=true`）；Codex/CPA 号豁免。
-+ [新增] 单元测试 `test/test_account_health.py`（14 例）。
-+ [新增] 文档 `docs/account-health.md`。
-
-### 可观测与告警（M3）
-+ [新增] `services/error_taxonomy.py`：错误分类（风控 / 限流 / 凭证 / 网络 / 上游 / 请求参数），带中文标签与处置建议。
-+ [新增] `services/metrics_service.py`：请求指标环形缓冲（端点/模型/状态/耗时/错误分类/账号），支持时间窗口聚合、P50/P95、RPM、最近失败样本。
-+ [新增] 指标接入：`LoggedCall.log` 统一记录，覆盖 chat / responses / messages / images / search / PPT / PSD 全部入口。
-+ [新增] 告警：连续失败阈值 + 窗口失败率双条件，支持通用 Webhook 与 AstrBot QQ 桥，冷却去重，后台线程派发。
-+ [新增] API：`GET /api/metrics/summary`、`GET /api/metrics/recent`、`GET/POST /api/alerts/settings`、`POST /api/alerts/test`、`GET /healthz`（免鉴权）。
-+ [新增] 日志自动轮转：`logs.jsonl` 超过 20MB 转为 `.1`。
-+ [新增] `deploy/systemd/chatgpt2api.service` 部署单元。
-+ [新增] 单元测试 `test/test_observability.py`（错误分类 + 指标聚合 + 告警判定 + 日志轮转）。
-+ [新增] 文档 `docs/observability.md`。
-
-### 仪表盘 / 代理节点 / 提示词库
-+ [新增] `GET /api/dashboard?hours=24`：按小时聚合（请求/失败/成功率/平均耗时/按模型/按错误分类），落盘 `data/metrics_hourly.json`，默认保留 7 天，重启不丢。
-+ [新增] 代理节点：`GET /api/proxy/nodes`、`POST /api/proxy/nodes/import`（每行 `url[,备注[,权重[,分组]]]`，自动合并去重）、`GET /api/proxy/groups`、`POST /api/proxy/groups/active`（指定生效分组，选路/探活只在该组内）。
-+ [新增] 提示词库：`GET /api/prompts`、`POST /api/prompts`、`DELETE /api/prompts/{id}`，存于 `config.json -> prompts`。
-+ [新增] 监控页增加「近 24 小时」按小时表格。
-+ [新增] 单元测试 `test_hourly_metrics.py`、`test_proxy_nodes.py`、`test_prompts.py`。
-
-### 账号分组（M2+）
-+ [新增] 账号分组：`GET/POST /api/account-groups`、`POST /api/account-groups/{id}`、`DELETE /api/account-groups/{id}`；账号通过 `POST /api/accounts/group` 批量归组（tokens 或 all）。
-+ [新增] 用户密钥可绑定分组（创建/更新带 `group_id`）；请求携带该密钥时，选号只会在同组账号内进行（管理员密钥不受限）。
-+ [新增] 分组配置持久化在 `config.json -> account_groups`；账号新增 `group_id` 字段。
-+ [新增] 单元测试 `test/test_account_groups.py`。
-
-### 模型目录（M1+）
-+ [新增] `GET /api/model-catalog`：统一对话/图片模型清单、默认模型、能力（高清图、放大开关、图片上游 slug）、来源与 revision。
-+ [新增] 配置 `model_catalog`：chat_models / image_models 覆盖、image_upstream_model（默认 gpt-5-3）、image_thinking_effort、image_upscale_enabled。
-+ [新增] 图片模型族扩展：`gpt-image-2.5`、`-flare`、`-sunburst`；gpt-image-2 → 配置的上游 slug（默认 gpt-5-3），2.5 系列 → auto。
-+ [新增] `/v1/models` 展示全部已配置的网页图片模型。
-+ [新增] 单元测试 `test/test_model_catalog.py`。
-
-### 面板（M4）
-+ [新增] 新页面 `/monitor`（顶部导航「监控」）：账号健康卡片（总数/健康/死号/仅 AT + 状态分布 + 预览/清理死号按钮）、出口池表格（状态/延迟/连续失败/冷却剩余/最近错误 + 立即探活）、请求指标（成功率/RPM/P50/P95/失败数）、按模型统计、错误分类、最近失败列表；每 30 秒自动刷新。
-+ [新增] 前端 API 封装：`fetchEgressPool` / `probeEgressPool` / `fetchAccountHealth` / `cleanupDeadAccounts` / `fetchMetricsSummary`。
-
-## 1.8.0 - 2026-07-28
-
-+ [新增] 新增默认请求上游模型名称和默认思考强度配置，支持在设置页面修改，并可通过模型名的 `-standard`、`-extended`、`-max` 后缀覆盖思考强度。
-+ [修复] 新增没出图也移除本地对话的配置，支持在图片生成失败、超时或仅返回文本时异步隐藏对应对话记录。
-+ [修复] `/v1/models` 汇总各账号类型的官方模型列表，文本请求按模型权限选择账号。
-+ [修复] 过滤隐藏、非最终频道及发往内部工具的助手消息，避免搜索指令和推理内容泄漏到 API 输出。
-+ [修复] 修复输出清洗误删代码和命令中标点前空格的问题。
-+ [修复] 为图片生成 SSE 流增加可配置的硬超时上限，避免上游长连接长时间挂起。
-+ [优化] 数据库存储改为增量同步，仅新增、更新或删除发生变化的记录，保留未变记录的 ID。
-
-## 1.7.0 - 2026-07-05
-
-+ [移除] 移除注册功能、防滥用机制导致封禁GitHub账号。
-
-## 1.6.0 - 2026-07-04
-
-+ [修复] 修复sub2api导入问题。
-+ [修复] 修复前端404、405问题。
-+ [新增] 新增出图后删除对话记录功能。
-+ [调整] Pro号不再按无限额度处理、约每天1000张。
-
-## 1.5.0 - 2026-06-13
-
-+ [新增] 新增 WARP / Privoxy / FlareSolverr 清障方案，注册遇到 Cloudflare 拦截后可刷新 clearance 并重试。
-+ [新增] 新增 `outlook_token` 邮箱池，支持 Outlook/Hotmail 注册验证码读取。
-+ [新增] 新增网页搜索兼容接口、图片编辑 mask 和图片任务相关能力。
-+ [优化] 更新 sentinel/PoW 获取方式，提高上游请求兼容性。
-+ [优化] 调整代理优先级和注册请求重试逻辑。
-
-## 1.4.1 - 2026-06-03
-
-+ [新增] 账号刷新改为异步模式，支持前端轮询刷新/重新登录进度。
-+ [新增] 号池管理页面新增重新登录功能，支持密码登录恢复异常账号。
-+ [新增] 刷新后自动重新登录异常账号（可在设置页开启）。
-+ [新增] 图片生成支持并行模式，多张图片使用独立线程和账号同时生成。
-+ [新增] 图片轮询超时自动换账号重试（最多4次），连接超时同账号递增等待重试。
-+ [新增] 图片二次确认机制与先check再hit可配置化，关闭后可跳过等待直接返回结果。
-+ [新增] 图片任务进度追踪，显示当前生成步骤（上传/预热/获取token/生成中等）。
-+ [新增] 图片超时后续轮询功能，前端显示"继续等待"按钮。
-+ [新增] 设置页新增图片二次确认、超时等待时间、自动重新登录等配置项。
-+ [优化] 优化生图页面滚动加载性能，图片懒加载、会话切换滚动位置保存与恢复。
-
-## 1.4.0 - 2026-05-31
-
-+ [新增] 新增AI生成可编辑PSD文件逆向。
-+ [新增] 新增AI生成可编辑PPT文件逆向。
-
-## 1.3.1 - 2026-05-30
-
-+ [新增] 新增ChatGPT搜索调试、Skills。
-
-## 1.3.0 - 2026-05-30
-
-+ [新增] 新增ChatGPT搜索接口逆向。
-
-## 1.2.4 - 2026-05-30
-
-+ [新增] 添加聊天补全缓存与重复请求合并。
-+ [新增] 新增无限画布一键跳转功能
-
-## 1.2.3 - 2026-05-29
-
-+ [新增] 新增账号级代理。
-+ [修复] 修复503异常信息、前端邮箱换行问题。
-
-## 1.2.2 - 2026-05-29
-
-+ [新增] 新增Codex链路生图、支持2k,4k。
-+ [新增] 支持RT刷新账号信息。
-
-## 1.2.0 - 2026-05-28
-
-+ [新增] 当前版本基线，包含 Web 面板、画图、号池管理、注册机、图片管理、日志管理和设置能力。
-+ [新增] 前端版本号支持点击查看版本更新弹窗，展示当前版本、最新版本和更新日志。
-+ [优化] 优化注册机效率，成功率大幅提高。
-+ [优化] 优化生图页面配置选项。
++ [新增] 出口池：多出口健康探测（200/401 视为可达）、EWMA 延迟选路、传输失败自动切换、连续失败冷却后自动恢复。
++ [新增] 出口池配置 `proxy_runtime.egress_pool`，支持 `probe_interval`、`failure_threshold`、`cooldown_sec`、`max_attempts`。
++ [新增] 出口池接口：`GET /api/proxy/egress`、`POST /api/proxy/egress/probe`、`POST /api/proxy/egress/settings`。
++ [新增] 代理节点批量导入（每行 `url[,备注[,权重[,分组]]]`）、分组列表、切换生效分组；出口池按分组选路与探活。
++ [新增] 账号健康分类：正常 / 即将过期 / 仅 AT / AT 过期且无 RT / RT 失效 / 缺 AT / Codex 托管。
++ [新增] 账号健康汇总 `GET /api/accounts/health-summary`：状态分布、账号年龄分桶、死号样本（令牌脱敏）。
++ [新增] 死号清理 `POST /api/accounts/cleanup-dead`：预览 / 执行，可选清理“仅 AT”的高危号。
++ [新增] 导入校验：缺少 refresh_token 的网页号直接拒绝并说明原因；裸 access_token 导入默认禁用，Codex/CPA 号豁免。
++ [新增] 请求指标：成功率、RPM、P50/P95、按模型、按端点、按错误分类、最近失败样本。
++ [新增] 错误分类：风控 / 限流 / 凭证 / 网络 / 上游 / 请求参数 / 号池无可用账号，附中文处置建议。
++ [新增] 告警：连续失败与失败率双阈值，支持通用 Webhook 与 AstrBot QQ 通道，冷却去重、异步派发，提供测试接口。
++ [新增] 按小时仪表盘：聚合结果落盘保留 7 天，重启不丢；`GET /api/dashboard?hours=24`。
++ [新增] 探活接口 `GET /healthz`：账号健康计数、出口池状态、近 5 分钟指标摘要。
++ [新增] 日志自动轮转：`data/logs.jsonl` 超过 20MB 转为 `.1`，避免长期运行撑爆磁盘。
++ [新增] 模型目录 `GET /api/model-catalog`：统一对话/图片清单、默认模型、能力标记、revision。
++ [新增] 图片模型族扩展：`gpt-image-2.5`、`gpt-image-2.5-flare`、`gpt-image-2.5-sunburst`；`gpt-image-2` 上游 slug 可配置（默认 `gpt-5-3`）。
++ [新增] 账号分组：分组 CRUD、账号批量归组、密钥绑定分组后只能调度同组账号（管理员不受限）。
++ [新增] 提示词库：提示词增删查接口，便于生图工作流复用。
++ [新增] 管理界面：左侧栏导航、深色侧边栏、靛蓝主色，新增「监控」页（账号健康 / 出口池 / 指标 / 按小时仪表盘）。
++ [调整] 版本检查与更新日志改为读取本项目仓库，移除原项目跳转与品牌信息。
++ [优化] 前端构建产物统一输出到 `web_dist`，一键部署脚本 `deploy/install.sh` 与 systemd 单元随包提供。
++ [优化] 新增 9 套单元测试（出口池、账号健康、指标告警、模型目录、账号分组、小时聚合、节点解析、提示词、配置）。
++ [文档] 新增 `docs/egress-pool.md`、`docs/account-health.md`、`docs/observability.md`，重写 README 与 NOTICE。
