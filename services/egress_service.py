@@ -44,6 +44,7 @@ class EgressEndpoint:
     label: str = ""
     enabled: bool = True
     weight: float = 1.0
+    group: str = ""
 
 
 @dataclass
@@ -119,6 +120,7 @@ class EgressManager:
                         label=str(item.get("label") or "").strip(),
                         enabled=bool(item.get("enabled", True)),
                         weight=max(0.0, weight),
+                        group=str(item.get("group") or "").strip(),
                     )
                 )
             self._endpoints = endpoints
@@ -156,6 +158,11 @@ class EgressManager:
             return fallback
 
     # -- selection -------------------------------------------------------
+    def _in_active_group(self, endpoint: EgressEndpoint, active_group: str) -> bool:
+        if not active_group or endpoint.group == active_group:
+            return True
+        return False
+
     def select(self, exclude: Iterable[str] | None = None) -> str | None:
         """Return the best endpoint URL, or None when the pool is unusable."""
         excluded = set(exclude or ())
@@ -163,7 +170,11 @@ class EgressManager:
         with self._lock:
             if not self._settings.get("enabled"):
                 return None
-            candidates = [e for e in self._endpoints if e.enabled and e.url not in excluded]
+            active_group = str(self._settings.get("active_group") or "").strip()
+            candidates = [
+                e for e in self._endpoints
+                if e.enabled and e.url not in excluded and self._in_active_group(e, active_group)
+            ]
             if not candidates:
                 return None
             available = []
@@ -235,7 +246,11 @@ class EgressManager:
         probe_url = str(self._settings.get("probe_url") or DEFAULT_PROBE_URL)
         wait = float(timeout if timeout is not None else self._int_setting("timeout_sec", 8))
         with self._lock:
-            targets = [endpoint for endpoint in self._endpoints if endpoint.enabled]
+            active_group = str(self._settings.get("active_group") or "").strip()
+            targets = [
+                endpoint for endpoint in self._endpoints
+                if endpoint.enabled and self._in_active_group(endpoint, active_group)
+            ]
         for endpoint in targets:
             ok, latency, detail = self._safe_probe(endpoint.url, probe_url, wait)
             if ok:
@@ -280,6 +295,7 @@ class EgressManager:
                         "label": endpoint.label,
                         "enabled": endpoint.enabled,
                         "weight": endpoint.weight,
+                        "group": endpoint.group,
                         "healthy": health.healthy,
                         "state": "cooling" if cooling else ("healthy" if health.healthy else ("unknown" if health.healthy is None else "failed")),
                         "latency_ms": round(health.latency_ms, 1) if health.latency_ms is not None else None,

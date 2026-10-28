@@ -29,6 +29,8 @@ from services.account_service import account_service
 from services.egress_service import egress_manager
 from services.metrics_service import metrics_service
 from services.model_catalog_service import get_model_catalog
+from services.prompts_service import create_prompt, delete_prompt, list_prompts
+from services.proxy_nodes import parse_node_lines
 from services.proxy_service import proxy_settings, test_clearance, test_proxy
 
 
@@ -172,6 +174,63 @@ def create_router(app_version: str) -> APIRouter:
         require_admin(authorization)
         return {"result": await run_in_threadpool(test_clearance, body.target_url)}
 
+    @router.get("/api/proxy/nodes")
+    async def list_proxy_nodes(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        runtime = config.get_proxy_runtime_settings()
+        pool = runtime.get("egress_pool") if isinstance(runtime.get("egress_pool"), dict) else {}
+        egress_manager.apply_settings(pool)
+        return {"endpoints": egress_manager.snapshot(), "settings": pool}
+
+    @router.post("/api/proxy/nodes/import")
+    async def import_proxy_nodes(body: SettingsUpdateRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        text = str(body.model_dump(mode="python").get("text") or "")
+        nodes = parse_node_lines(text)
+        if not nodes:
+            raise HTTPException(status_code=400, detail={"error": "没有解析到有效节点（每行：url[,备注[,权重[,分组]]]）"})
+        runtime = config.get_proxy_runtime_settings()
+        pool = dict(runtime.get("egress_pool") or {})
+        endpoints = list(pool.get("endpoints") or [])
+        by_url = {str(item.get("url") or ""): dict(item) for item in endpoints if isinstance(item, dict)}
+        created = updated = 0
+        for node in nodes:
+            if node["url"] in by_url:
+                merged = dict(by_url[node["url"]])
+                merged.update({key: value for key, value in node.items() if value not in ("", None)})
+                by_url[node["url"]] = merged
+                updated += 1
+            else:
+                by_url[node["url"]] = node
+                created += 1
+        pool["endpoints"] = list(by_url.values())
+        runtime["egress_pool"] = pool
+        config.update({"proxy_runtime": runtime})
+        saved = config.get_proxy_runtime_settings().get("egress_pool") or {}
+        egress_manager.apply_settings(saved)
+        return {"created": created, "updated": updated, "endpoints": egress_manager.snapshot()}
+
+    @router.get("/api/proxy/groups")
+    async def list_proxy_groups(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        runtime = config.get_proxy_runtime_settings()
+        pool = runtime.get("egress_pool") if isinstance(runtime.get("egress_pool"), dict) else {}
+        groups = sorted({str(item.get("group") or "") for item in pool.get("endpoints") or [] if isinstance(item, dict)})
+        return {"groups": groups, "active_group": pool.get("active_group") or ""}
+
+    @router.post("/api/proxy/groups/active")
+    async def activate_proxy_group(body: SettingsUpdateRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        group = str(body.model_dump(mode="python").get("group") or "").strip()
+        runtime = config.get_proxy_runtime_settings()
+        pool = dict(runtime.get("egress_pool") or {})
+        pool["active_group"] = group
+        runtime["egress_pool"] = pool
+        config.update({"proxy_runtime": runtime})
+        saved = config.get_proxy_runtime_settings().get("egress_pool") or {}
+        egress_manager.apply_settings(saved)
+        return {"active_group": saved.get("active_group") or "", "endpoints": egress_manager.snapshot()}
+
     @router.get("/api/proxy/egress")
     async def get_egress_pool_endpoint(authorization: str | None = Header(default=None)):
         require_admin(authorization)
@@ -228,6 +287,33 @@ def create_router(app_version: str) -> APIRouter:
     async def metrics_summary(window_seconds: int = 3600, authorization: str | None = Header(default=None)):
         require_admin(authorization)
         return await run_in_threadpool(metrics_service.snapshot, window_seconds=window_seconds)
+
+    @router.get("/api/prompts")
+    async def prompts_list(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return {"items": list_prompts()}
+
+    @router.post("/api/prompts")
+    async def prompts_create(body: SettingsUpdateRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        payload = body.model_dump(mode="python")
+        try:
+            item = create_prompt(str(payload.get("title") or ""), str(payload.get("content") or ""), payload.get("tags") or [])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+        return {"item": item, "items": list_prompts()}
+
+    @router.delete("/api/prompts/{prompt_id}")
+    async def prompts_delete(prompt_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        if not delete_prompt(prompt_id):
+            raise HTTPException(status_code=404, detail={"error": "提示词不存在"})
+        return {"items": list_prompts()}
+
+    @router.get("/api/dashboard")
+    async def dashboard_endpoint(hours: int = 24, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return await run_in_threadpool(metrics_service.dashboard, hours)
 
     @router.get("/api/metrics/recent")
     async def metrics_recent(limit: int = 100, authorization: str | None = Header(default=None)):

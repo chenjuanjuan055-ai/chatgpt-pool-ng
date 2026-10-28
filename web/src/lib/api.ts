@@ -995,3 +995,30 @@ export async function cleanupDeadAccounts(apply: boolean, includeAtOnly = false)
 export async function fetchMetricsSummary(windowSeconds = 3600) {
   return httpRequest<MetricsSummary>(`/api/metrics/summary?window_seconds=${windowSeconds}`);
 }
+
+export type DashboardRow = {
+  hour: string;
+  total: number;
+  failed: number;
+  success_rate: number | null;
+  avg_ms: number | null;
+  by_model: Record<string, { total: number; failed: number }>;
+  by_category: Record<string, number>;
+};
+
+export type DashboardView = {
+  totals: {
+    hours: number;
+    total: number;
+    failed: number;
+    success_rate: number | null;
+    avg_ms: number | null;
+    by_category: Record<string, number>;
+    by_model: Record<string, { total: number; failed: number }>;
+  };
+  rows: DashboardRow[];
+};
+
+export async function fetchDashboard(hours = 24) {
+  return httpRequest<DashboardView>(`/api/dashboard?hours=${hours}`);
+}

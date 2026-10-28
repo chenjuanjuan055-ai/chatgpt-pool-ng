@@ -12,11 +12,13 @@ import {
   cleanupDeadAccounts,
   fetchAccountHealth,
   fetchEgressPool,
+  fetchDashboard,
   fetchMetricsSummary,
   probeEgressPool,
   type AccountHealthSummary,
   type EgressEndpointStatus,
   type EgressPoolView,
+  type DashboardRow,
   type MetricsSummary,
 } from "@/lib/api";
 import { useAuthGuard } from "@/lib/use-auth-guard";
@@ -50,6 +52,7 @@ export default function MonitorPage() {
   const [metrics, setMetrics] = useState<MetricsSummary | null>(null);
   const [egress, setEgress] = useState<EgressPoolView | null>(null);
   const [health, setHealth] = useState<AccountHealthSummary | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [probing, setProbing] = useState(false);
   const [cleaning, setCleaning] = useState(false);
@@ -57,14 +60,16 @@ export default function MonitorPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [metricsData, egressData, healthData] = await Promise.all([
+      const [metricsData, egressData, healthData, dashboardData] = await Promise.all([
         fetchMetricsSummary(3600),
         fetchEgressPool(),
         fetchAccountHealth(),
+        fetchDashboard(24),
       ]);
       setMetrics(metricsData);
       setEgress(egressData);
       setHealth(healthData);
+      setDashboard(dashboardData.rows.slice(-12));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "加载监控数据失败");
     } finally {
@@ -318,6 +323,39 @@ export default function MonitorPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="mb-3 font-medium">近 24 小时（按小时）</div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>时间(UTC)</TableHead>
+                <TableHead>请求</TableHead>
+                <TableHead>失败</TableHead>
+                <TableHead>成功率</TableHead>
+                <TableHead>平均耗时</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {dashboard.slice().reverse().map((row) => (
+                <TableRow key={row.hour}>
+                  <TableCell className="font-mono text-xs">{row.hour.replace("T", " ")}</TableCell>
+                  <TableCell>{row.total}</TableCell>
+                  <TableCell>{row.failed}</TableCell>
+                  <TableCell>{formatPercent(row.success_rate)}</TableCell>
+                  <TableCell>{formatLatency(row.avg_ms)}</TableCell>
+                </TableRow>
+              ))}
+              {!dashboard.length && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">暂无小时数据</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-4">

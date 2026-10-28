@@ -15,9 +15,12 @@ from collections import Counter, deque
 from typing import Any, Deque, Iterable
 
 from services import error_taxonomy
-from services.config import config
+from services.config import DATA_DIR, config
+from services.hourly_metrics import HourlyMetrics
 
 MAX_RECORDS = 4000
+
+hourly_metrics = HourlyMetrics(DATA_DIR / "metrics_hourly.json")
 
 
 def _percentile(values: list[float], ratio: float) -> float | None:
@@ -68,6 +71,13 @@ class MetricsService:
             else:
                 self._consecutive_failures = 0
             consecutive = self._consecutive_failures
+        hourly_metrics.add(
+            ts=now,
+            status=record["status"],
+            model=record["model"],
+            error_category=record["error_category"],
+            latency_ms=record["duration_ms"],
+        )
         self._maybe_alert(record, consecutive, now)
         return record
 
@@ -141,6 +151,13 @@ class MetricsService:
             ],
             "by_endpoint": [{"endpoint": key, "count": count} for key, count in by_endpoint.most_common()],
             "recent_failures": recent_failures,
+        }
+
+    def dashboard(self, hours: int = 24, now: float | None = None) -> dict[str, Any]:
+        hours = max(1, min(int(hours or 24), 24 * 14))
+        return {
+            "totals": hourly_metrics.totals(hours=hours, now=now),
+            "rows": hourly_metrics.rows(hours=hours, now=now),
         }
 
     def recent(self, limit: int = 100) -> list[dict[str, Any]]:

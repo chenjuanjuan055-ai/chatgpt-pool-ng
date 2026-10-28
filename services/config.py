@@ -17,6 +17,7 @@ VERSION_FILE = BASE_DIR / "VERSION"
 BACKUP_STATE_FILE = DATA_DIR / "backup_state.json"
 
 DEFAULT_ACCOUNT_GROUPS: list = []
+DEFAULT_PROMPTS: list = []
 
 DEFAULT_MODEL_CATALOG = {
     "chat_models": [],
@@ -25,6 +26,23 @@ DEFAULT_MODEL_CATALOG = {
     "image_upstream_model": "gpt-5-3",
     "image_thinking_effort": "",
 }
+
+
+def _normalize_prompt_item(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    title = str(value.get("title") or "").strip()
+    content = str(value.get("content") or "").strip()
+    if not title or not content:
+        return None
+    tags = value.get("tags") if isinstance(value.get("tags"), list) else []
+    return {
+        "id": str(value.get("id") or ""),
+        "title": title,
+        "content": content,
+        "tags": _normalize_string_list(tags),
+        "created_at": value.get("created_at"),
+    }
 
 
 def _normalize_account_group(value: object) -> dict[str, object] | None:
@@ -155,6 +173,7 @@ DEFAULT_EGRESS_POOL = {
     "timeout_sec": 8,
     "failure_threshold": 2,
     "cooldown_sec": 300,
+    "active_group": "",
     "endpoints": [],
 }
 
@@ -351,6 +370,7 @@ def _normalize_egress_endpoints(value: object) -> list[dict[str, object]]:
                 "label": str(item.get("label") or "").strip(),
                 "enabled": _normalize_bool(item.get("enabled"), True),
                 "weight": max(0.0, weight),
+                "group": str(item.get("group") or "").strip(),
             }
         )
     return normalized
@@ -370,6 +390,7 @@ def _normalize_egress_pool_settings(value: object) -> dict[str, object]:
             source.get("failure_threshold"), int(default["failure_threshold"]), 1
         ),
         "cooldown_sec": _normalize_positive_int(source.get("cooldown_sec"), int(default["cooldown_sec"]), 10),
+        "active_group": str(source.get("active_group") or "").strip(),
         "endpoints": _normalize_egress_endpoints(source.get("endpoints")),
     }
 
@@ -744,6 +765,7 @@ class ConfigStore:
         data["alerts"] = self.get_alert_settings()
         data["model_catalog"] = self.get_model_catalog_settings()
         data["account_groups"] = self.get_account_groups_settings()
+        data["prompts"] = self.get_prompt_settings()
         data["image_storage"] = self.get_image_storage_settings()
         data["chat_completion_cache"] = self.get_chat_completion_cache_settings()
         data["proxy_runtime"] = self.get_public_proxy_runtime_settings()
@@ -777,6 +799,8 @@ class ConfigStore:
         next_data.update(dict(data or {}))
         if "backup" in next_data:
             next_data["backup"] = _normalize_backup_settings(next_data.get("backup"))
+        if "prompts" in next_data:
+            next_data["prompts"] = [item for item in (_normalize_prompt_item(entry) for entry in (next_data.get("prompts") or []) if isinstance(next_data.get("prompts"), list)) if item]
         if "account_groups" in next_data:
             next_data["account_groups"] = [
                 group for group in (_normalize_account_group(item) for item in (next_data.get("account_groups") or []) if isinstance(next_data.get("account_groups"), list)) if group
@@ -818,6 +842,12 @@ class ConfigStore:
         self.data = next_data
         self._save()
         return self.get()
+
+    def get_prompt_settings(self) -> list[dict[str, object]]:
+        items = self.data.get("prompts")
+        if not isinstance(items, list):
+            return []
+        return [item for item in (_normalize_prompt_item(entry) for entry in items) if item]
 
     def get_account_groups_settings(self) -> list[dict[str, object]]:
         groups = self.data.get("account_groups")

@@ -27,6 +27,13 @@
 + [新增] 单元测试 `test/test_observability.py`（错误分类 + 指标聚合 + 告警判定 + 日志轮转）。
 + [新增] 文档 `docs/observability.md`。
 
+### 仪表盘 / 代理节点 / 提示词库
++ [新增] `GET /api/dashboard?hours=24`：按小时聚合（请求/失败/成功率/平均耗时/按模型/按错误分类），落盘 `data/metrics_hourly.json`，默认保留 7 天，重启不丢。
++ [新增] 代理节点：`GET /api/proxy/nodes`、`POST /api/proxy/nodes/import`（每行 `url[,备注[,权重[,分组]]]`，自动合并去重）、`GET /api/proxy/groups`、`POST /api/proxy/groups/active`（指定生效分组，选路/探活只在该组内）。
++ [新增] 提示词库：`GET /api/prompts`、`POST /api/prompts`、`DELETE /api/prompts/{id}`，存于 `config.json -> prompts`。
++ [新增] 监控页增加「近 24 小时」按小时表格。
++ [新增] 单元测试 `test_hourly_metrics.py`、`test_proxy_nodes.py`、`test_prompts.py`。
+
 ### 账号分组（M2+）
 + [新增] 账号分组：`GET/POST /api/account-groups`、`POST /api/account-groups/{id}`、`DELETE /api/account-groups/{id}`；账号通过 `POST /api/accounts/group` 批量归组（tokens 或 all）。
 + [新增] 用户密钥可绑定分组（创建/更新带 `group_id`）；请求携带该密钥时，选号只会在同组账号内进行（管理员密钥不受限）。
