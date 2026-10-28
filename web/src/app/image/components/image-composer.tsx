@@ -346,12 +346,12 @@ export function ImageComposer({
                     {isSizeMenuOpen ? (
                       <div
                         ref={sizeMenuRef}
-                        className="fixed z-[80] max-h-[62dvh] overflow-y-auto rounded-[24px] border border-border bg-card p-4 shadow-xl sm:max-h-none sm:overflow-visible"
+                        className="fixed z-[80] max-h-[calc(100dvh-9rem)] overflow-y-auto rounded-[24px] border border-border bg-card p-4 shadow-xl"
                         style={{
                           top: sizeMenuPos.top,
                           left: sizeMenuPos.left,
                           transform: "translateY(-100%)",
-                          width: "min(460px, calc(100vw - 2rem))",
+                          width: "min(720px, calc(100vw - 2rem))",
                         }}
                       >
                         <h3 className="mb-3 text-base font-semibold text-foreground">图像设置</h3>
@@ -393,8 +393,8 @@ export function ImageComposer({
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="mb-3">
-                          <div className="mb-2 text-sm font-medium text-foreground">质量</div>
+                        <div className="mb-2.5">
+                          <div className="mb-1.5 text-[13px] font-medium text-foreground">质量</div>
                           <div className="grid grid-cols-4 gap-2">
                             {qualityOptions.map((option) => {
                               const active = option.value === imageQuality;
@@ -403,7 +403,7 @@ export function ImageComposer({
                                   key={option.value}
                                   type="button"
                                   className={cn(
-                                    "h-9 cursor-pointer rounded-full border border-border bg-card text-sm text-foreground/80 transition hover:border-primary/40 hover:bg-accent",
+                                    "h-8 cursor-pointer rounded-full border border-border bg-card text-[13px] text-foreground/80 transition hover:border-primary/40 hover:bg-accent",
                                     active && "border-primary bg-primary/10 font-medium text-primary",
                                   )}
                                   onClick={() => onImageQualityChange(option.value)}
@@ -414,8 +414,8 @@ export function ImageComposer({
                             })}
                           </div>
                         </div>
-                        <div className="mb-3">
-                          <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground">
+                        <div className="mb-2.5">
+                          <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-foreground">
                             尺寸 <Info className="size-3.5 text-muted-foreground" />
                           </div>
                           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
@@ -444,11 +444,11 @@ export function ImageComposer({
                             </div>
                           </div>
                         </div>
-                        <div className="mb-3">
-                          <div className="mb-2 flex items-center gap-1.5 text-sm font-medium text-foreground">
+                        <div className="mb-2.5">
+                          <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-foreground">
                             宽高比 <Info className="size-3.5 text-muted-foreground" />
                           </div>
-                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                             {aspectOptions.map((option) => {
                               const active = option.ratio === imageRatio && option.tier === imageTier && option.width === imageWidth && option.height === imageHeight;
                               const Icon = option.icon;
@@ -459,7 +459,7 @@ export function ImageComposer({
                                   type="button"
                                   disabled={disabled}
                                   className={cn(
-                                    "flex h-[64px] cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-card text-sm text-foreground/80 transition hover:border-primary/40 hover:bg-accent",
+                                    "flex h-14 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl border border-border bg-card text-[13px] text-foreground/80 transition hover:border-primary/40 hover:bg-accent",
                                     active && "border-primary bg-primary/10 text-primary",
                                     disabled && "cursor-not-allowed border-border bg-muted text-muted-foreground/50 hover:border-border hover:bg-muted",
                                   )}
@@ -486,9 +486,9 @@ export function ImageComposer({
                             })}
                           </div>
                         </div>
-                        <div className="border-t border-border pt-3">
-                          <div className="mb-2 text-sm font-medium text-foreground">生成数量</div>
-                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                        <div className="border-t border-border pt-2.5">
+                          <div className="mb-1.5 text-[13px] font-medium text-foreground">生成数量</div>
+                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                             {countOptions.map((option) => {
                               const active = imageCount === option;
                               return (
@@ -496,7 +496,7 @@ export function ImageComposer({
                                   key={option}
                                   type="button"
                                   className={cn(
-                                    "h-9 cursor-pointer rounded-full border border-border bg-card text-sm text-foreground/80 transition hover:border-primary/40 hover:bg-accent",
+                                    "h-8 cursor-pointer rounded-full border border-border bg-card text-[13px] text-foreground/80 transition hover:border-primary/40 hover:bg-accent",
                                     active && "border-primary bg-primary/10 font-medium text-primary",
                                   )}
                                   onClick={() => onImageCountChange(option)}
@@ -513,7 +513,7 @@ export function ImageComposer({
                               step="1"
                               value={imageCount}
                               onChange={(event) => onImageCountChange(event.target.value)}
-                              className="h-9 rounded-full border-border bg-card px-3 text-center text-sm font-medium text-foreground/85 shadow-none focus-visible:ring-0"
+                              className="h-8 rounded-full border-border bg-card px-3 text-center text-[13px] font-medium text-foreground/85 shadow-none focus-visible:ring-0"
                             />
                           </div>
                         </div>
