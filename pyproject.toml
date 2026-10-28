@@ -1,7 +1,7 @@
 [project]
-name = "chatgpt2api"
-version = "0.1.0"
-description = "Add your description here"
+name = "chatgpt-pool-ng"
+version = "1.9.0"
+description = "ChatGPT account pool with egress governance, account health and observability"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

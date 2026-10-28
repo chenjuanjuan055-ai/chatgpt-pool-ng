@@ -1,6 +1,6 @@
 {
-  "name": "next-starter",
-  "version": "0.1.0",
+  "name": "chatgpt-pool-ng-web",
+  "version": "1.9.0",
   "private": true,
   "type": "module",
   "scripts": {

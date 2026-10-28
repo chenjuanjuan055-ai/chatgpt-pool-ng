@@ -1,0 +1,20 @@
+ChatGPT 号池（chatgpt-pool-ng）
+Copyright (c) 2026 <你的名字>
+
+本项目基于以下开源项目二次开发：
+
+1. basketikun/chatgpt2api (v1.8.0)
+   License: MIT
+   Copyright (c) 2026 kunkun
+   https://github.com/basketikun/chatgpt2api
+   本项目以其为基座，保留其全部功能与代码结构。
+
+2. yukkcat/chatgpt2api
+   License: AGPL-3.0
+   https://github.com/yukkcat/chatgpt2api
+   仅参考其产品形态与功能设计（模型目录、账号分组、仪表盘等），
+   相关功能均为独立实现，未拷贝该项目的源代码。
+
+本项目以 MIT 许可证发布，许可证全文见 LICENSE。
+使用本项目接入的服务时，请自行确认符合目标平台的服务条款与当地法律法规，
+并自行承担账号与合规风险。
