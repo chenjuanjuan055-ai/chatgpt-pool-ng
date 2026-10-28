@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ImagePlus, LoaderCircle, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { fetchModels } from "@/lib/api";
 import { httpRequest } from "@/lib/request";
 
 import { pretty, type ChatCompletionResponse, type ChatContentPart, type ChatMessage } from "./types";
@@ -71,6 +72,7 @@ function messageImages(message: ChatMessage): string[] {
 
 export function ChatPanel() {
   const [model, setModel] = useState("auto");
+  const [models, setModels] = useState<string[]>(["auto"]);
   const [reasoningEffort, setReasoningEffort] = useState("");
   const [input, setInput] = useState("你好，先记住我的项目叫 chatgpt-pool-ng。");
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
@@ -78,6 +80,25 @@ export function ChatPanel() {
   const [raw, setRaw] = useState<ChatCompletionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void fetchModels()
+      .then((result) => {
+        if (!active) return;
+        const ids = (result.data || [])
+          .map((item) => String(item.id || "").trim())
+          .filter(Boolean);
+        const ordered = ["auto", ...ids.filter((id) => id !== "auto")];
+        setModels(Array.from(new Set(ordered)));
+      })
+      .catch(() => {
+        /* keep the fallback list */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleImagesChange = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -138,7 +159,18 @@ export function ChatPanel() {
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px]">
             <div className="space-y-2">
               <Label htmlFor="chat-model">Model</Label>
-              <Input id="chat-model" value={model} onChange={(event) => setModel(event.target.value)} className="rounded-md border-stone-200/70 bg-transparent shadow-none dark:border-white/10" />
+              <Select value={model} onValueChange={setModel}>
+                <SelectTrigger id="chat-model" className="w-full rounded-md border-stone-200/70 bg-transparent shadow-none dark:border-white/10">
+                  <SelectValue placeholder="选择模型" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(models.includes(model) ? models : [model, ...models]).map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="chat-reasoning-effort">思考强度</Label>
