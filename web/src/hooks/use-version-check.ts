@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import webConfig from "@/constants/common-env";
@@ -8,11 +8,12 @@ import { parseChangelog, type ReleaseInfo } from "@/lib/release";
 
 const latestVersionUrl =
   "https://raw.githubusercontent.com/chenjuanjuan055-ai/chatgpt-pool-ng/main/VERSION";
-const latestChangelogUrl =
-  "https://raw.githubusercontent.com/chenjuanjuan055-ai/chatgpt-pool-ng/main/CHANGELOG.md";
 
-function readLocalReleases(): ReleaseInfo[] {
-  return JSON.parse(process.env.NEXT_PUBLIC_APP_RELEASES || "[]");
+async function fetchLocalReleases(): Promise<ReleaseInfo[]> {
+  const response = await fetch("/CHANGELOG.md", { cache: "no-store" });
+  if (!response.ok) throw new Error("changelog unavailable");
+  const text = await response.text();
+  return parseChangelog(text);
 }
 
 function toVersionParts(version: string) {
@@ -33,7 +34,7 @@ function isNewerVersion(latestVersion: string, currentVersion: string) {
 
 export function useVersionCheck() {
   const currentVersion = webConfig.appVersion;
-  const localReleases = useMemo(readLocalReleases, []);
+  const [localReleases, setLocalReleases] = useState<ReleaseInfo[]>([]);
   const [latestVersion, setLatestVersion] = useState(currentVersion);
   const [releases, setReleases] = useState<ReleaseInfo[]>(localReleases);
   const [checking, setChecking] = useState(false);
@@ -44,28 +45,30 @@ export function useVersionCheck() {
     async (showMessage = false) => {
       setChecking(true);
       try {
-        const [versionResponse, changelogResponse] = await Promise.all([
-          fetch(latestVersionUrl),
-          fetch(latestChangelogUrl),
-        ]);
-        if (!versionResponse.ok || !changelogResponse.ok) throw new Error();
-        const [version, changelog] = await Promise.all([
-          versionResponse.text(),
-          changelogResponse.text(),
-        ]);
-        setLatestVersion(version.trim() || currentVersion);
-        if (changelog.trim()) setReleases(parseChangelog(changelog));
-        if (showMessage) toast.success("已获取最新版本信息");
+        const local = await fetchLocalReleases().catch(() => []);
+        if (local.length) setReleases(local);
+        const versionResponse = await fetch(`${latestVersionUrl}?t=${Date.now()}`, { cache: "no-store" });
+        if (!versionResponse.ok) throw new Error();
+        const version = (await versionResponse.text()).trim();
+        setLatestVersion(version || currentVersion);
+        if (showMessage) toast.success("已检查最新版本");
       } catch {
         setLatestVersion(currentVersion);
-        setReleases(localReleases);
-        if (showMessage) toast.error("获取最新版本信息失败");
+        if (showMessage) toast.error("检查更新失败（不影响本地版本记录）");
       } finally {
         setChecking(false);
       }
     },
-    [currentVersion, localReleases],
+    [currentVersion],
   );
+
+  useEffect(() => {
+    void fetchLocalReleases()
+      .then((items) => {
+        if (items.length) setReleases((prev) => (prev.length ? prev : items));
+      })
+      .catch(() => {});
+  }, []);
 
   const openReleaseModal = () => {
     setOpen(true);
