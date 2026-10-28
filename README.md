@@ -38,7 +38,7 @@
 ### 源码运行
 
 ```bash
-git clone <你的仓库地址> chatgpt-pool-ng
+git clone https://github.com/chenjuanjuan055-ai/chatgpt-pool-ng.git chatgpt-pool-ng
 cd chatgpt-pool-ng
 
 python -m venv .venv
