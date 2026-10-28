@@ -16,6 +16,17 @@
 + [新增] 单元测试 `test/test_account_health.py`（14 例）。
 + [新增] 文档 `docs/account-health.md`。
 
+### 可观测与告警（M3）
++ [新增] `services/error_taxonomy.py`：错误分类（风控 / 限流 / 凭证 / 网络 / 上游 / 请求参数），带中文标签与处置建议。
++ [新增] `services/metrics_service.py`：请求指标环形缓冲（端点/模型/状态/耗时/错误分类/账号），支持时间窗口聚合、P50/P95、RPM、最近失败样本。
++ [新增] 指标接入：`LoggedCall.log` 统一记录，覆盖 chat / responses / messages / images / search / PPT / PSD 全部入口。
++ [新增] 告警：连续失败阈值 + 窗口失败率双条件，支持通用 Webhook 与 AstrBot QQ 桥，冷却去重，后台线程派发。
++ [新增] API：`GET /api/metrics/summary`、`GET /api/metrics/recent`、`GET/POST /api/alerts/settings`、`POST /api/alerts/test`、`GET /healthz`（免鉴权）。
++ [新增] 日志自动轮转：`logs.jsonl` 超过 20MB 转为 `.1`。
++ [新增] `deploy/systemd/chatgpt2api.service` 部署单元。
++ [新增] 单元测试 `test/test_observability.py`（错误分类 + 指标聚合 + 告警判定 + 日志轮转）。
++ [新增] 文档 `docs/observability.md`。
+
 ## 1.8.0 - 2026-07-28
 
 + [新增] 新增默认请求上游模型名称和默认思考强度配置，支持在设置页面修改，并可通过模型名的 `-standard`、`-extended`、`-max` 后缀覆盖思考强度。

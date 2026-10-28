@@ -16,6 +16,43 @@ CONFIG_FILE = BASE_DIR / "config.json"
 VERSION_FILE = BASE_DIR / "VERSION"
 BACKUP_STATE_FILE = DATA_DIR / "backup_state.json"
 
+DEFAULT_ALERTS = {
+    "enabled": False,
+    "webhook_url": "",
+    "consecutive_failures": 5,
+    "window_seconds": 300,
+    "min_requests": 20,
+    "max_failure_rate": 0.5,
+    "cooldown_sec": 300,
+    "qq": {"url": "", "token": "", "umo": ""},
+}
+
+
+def _normalize_alert_settings(value: object) -> dict[str, object]:
+    source = value if isinstance(value, dict) else {}
+    qq_source = source.get("qq") if isinstance(source.get("qq"), dict) else {}
+    try:
+        max_rate = float(source.get("max_failure_rate", DEFAULT_ALERTS["max_failure_rate"]))
+    except (TypeError, ValueError):
+        max_rate = float(DEFAULT_ALERTS["max_failure_rate"])
+    return {
+        "enabled": _normalize_bool(source.get("enabled"), bool(DEFAULT_ALERTS["enabled"])),
+        "webhook_url": str(source.get("webhook_url") or "").strip(),
+        "consecutive_failures": _normalize_positive_int(
+            source.get("consecutive_failures"), int(DEFAULT_ALERTS["consecutive_failures"]), 1
+        ),
+        "window_seconds": _normalize_positive_int(source.get("window_seconds"), int(DEFAULT_ALERTS["window_seconds"]), 30),
+        "min_requests": _normalize_positive_int(source.get("min_requests"), int(DEFAULT_ALERTS["min_requests"]), 1),
+        "max_failure_rate": min(1.0, max(0.0, max_rate)),
+        "cooldown_sec": _normalize_positive_int(source.get("cooldown_sec"), int(DEFAULT_ALERTS["cooldown_sec"]), 10),
+        "qq": {
+            "url": str(qq_source.get("url") or "").strip(),
+            "token": str(qq_source.get("token") or "").strip(),
+            "umo": str(qq_source.get("umo") or "").strip(),
+        },
+    }
+
+
 DEFAULT_BACKUP_INCLUDE = {
     "config": True,
     "cpa": True,
@@ -649,6 +686,7 @@ class ConfigStore:
         data["default_upstream_model_name"] = self.default_upstream_model_name
         data["default_thinking_effort"] = self.default_thinking_effort
         data["backup"] = self.get_backup_settings()
+        data["alerts"] = self.get_alert_settings()
         data["image_storage"] = self.get_image_storage_settings()
         data["chat_completion_cache"] = self.get_chat_completion_cache_settings()
         data["proxy_runtime"] = self.get_public_proxy_runtime_settings()
@@ -682,6 +720,15 @@ class ConfigStore:
         next_data.update(dict(data or {}))
         if "backup" in next_data:
             next_data["backup"] = _normalize_backup_settings(next_data.get("backup"))
+        if "alerts" in next_data:
+            previous_alerts = self.get_alert_settings()
+            incoming_alerts = next_data.get("alerts")
+            if isinstance(incoming_alerts, dict) and isinstance(previous_alerts.get("qq"), dict):
+                merged_qq = dict(previous_alerts["qq"])
+                merged_qq.update(incoming_alerts.get("qq") or {})
+                incoming_alerts = dict(incoming_alerts)
+                incoming_alerts["qq"] = merged_qq
+            next_data["alerts"] = _normalize_alert_settings(incoming_alerts)
         if "image_storage" in next_data:
             next_data["image_storage"] = _normalize_image_storage_settings(next_data.get("image_storage"))
             _validate_image_storage_settings(next_data["image_storage"])
@@ -708,6 +755,9 @@ class ConfigStore:
         self.data = next_data
         self._save()
         return self.get()
+
+    def get_alert_settings(self) -> dict[str, object]:
+        return _normalize_alert_settings(self.data.get("alerts"))
 
     def get_backup_settings(self) -> dict[str, object]:
         return _normalize_backup_settings(self.data.get("backup"))

@@ -15,6 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from services.config import DATA_DIR
+from services.metrics_service import metrics_service
 from services.protocol.error_response import anthropic_error_response, openai_error_response
 from utils.helper import anthropic_sse_stream, sse_json_stream
 
@@ -24,8 +25,9 @@ INTERNAL_RESPONSE_KEYS = {"_account_email", "_conversation_id"}
 
 
 class LogService:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, max_bytes: int = 20 * 1024 * 1024):
         self.path = path
+        self.max_bytes = max(1024, int(max_bytes))
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
@@ -70,6 +72,18 @@ class LogService:
         }
         with self.path.open("a", encoding="utf-8") as file:
             file.write(self._serialize_item(item) + "\n")
+        self._rotate_if_needed()
+
+    def _rotate_if_needed(self) -> None:
+        try:
+            if self.path.stat().st_size <= self.max_bytes:
+                return
+            rotated = self.path.with_name(self.path.name + ".1")
+            if rotated.exists():
+                rotated.unlink()
+            self.path.rename(rotated)
+        except OSError:
+            pass
 
     def list(self, type: str = "", start_date: str = "", end_date: str = "", limit: int = 200) -> list[dict[str, Any]]:
         if not self.path.exists():
@@ -335,3 +349,11 @@ class LoggedCall:
         if collected_urls and not self.endpoint.startswith("/v1/search"):
             detail["urls"] = list(dict.fromkeys(collected_urls))
         log_service.add(LOG_TYPE_CALL, f"{self.summary}{suffix}", detail)
+        metrics_service.record_call(
+            endpoint=self.endpoint,
+            model=self.model,
+            status=status,
+            duration_ms=detail.get("duration_ms"),
+            error=error,
+            account_email=email,
+        )

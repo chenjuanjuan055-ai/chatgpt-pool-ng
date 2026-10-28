@@ -24,7 +24,10 @@ from services.image_service import (
 from services.image_storage_service import ImageStorageError, image_storage_service
 from services.image_tags_service import delete_tag, get_all_tags, set_tags
 from services.log_service import log_service
+from services.account_health import analyze_accounts
+from services.account_service import account_service
 from services.egress_service import egress_manager
+from services.metrics_service import metrics_service
 from services.proxy_service import proxy_settings, test_clearance, test_proxy
 
 
@@ -211,6 +214,52 @@ def create_router(app_version: str) -> APIRouter:
         return {
             "backend": storage.get_backend_info(),
             "health": storage.health_check(),
+        }
+
+    @router.get("/api/metrics/summary")
+    async def metrics_summary(window_seconds: int = 3600, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return await run_in_threadpool(metrics_service.snapshot, window_seconds=window_seconds)
+
+    @router.get("/api/metrics/recent")
+    async def metrics_recent(limit: int = 100, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return {"items": metrics_service.recent(limit)}
+
+    @router.get("/api/alerts/settings")
+    async def get_alert_settings(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return {"settings": config.get_alert_settings()}
+
+    @router.post("/api/alerts/settings")
+    async def save_alert_settings(body: SettingsUpdateRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            config.update({"alerts": body.model_dump(mode="python")})
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+        return {"settings": config.get_alert_settings()}
+
+    @router.post("/api/alerts/test")
+    async def test_alert_channel(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return {"result": await run_in_threadpool(metrics_service.test_dispatch)}
+
+    @router.get("/healthz")
+    async def healthz():
+        accounts = account_service.list_accounts()
+        summary = analyze_accounts(accounts)
+        snapshot = metrics_service.snapshot(window_seconds=300, sample_limit=3)
+        return {
+            "status": "ok",
+            "accounts": {"total": summary["total"], "healthy": summary["healthy"], "dead": summary["dead"]},
+            "egress": {"enabled": egress_manager.enabled, "endpoints": egress_manager.snapshot()},
+            "metrics": {
+                "total": snapshot["total"],
+                "failed": snapshot["failed"],
+                "success_rate": snapshot["success_rate"],
+                "rpm": snapshot["rpm"],
+            },
         }
 
     @router.post("/api/backup/test")
