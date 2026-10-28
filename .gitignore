@@ -8,3 +8,4 @@ web/node_modules/
 web/.next/
 web/package-lock.json
 web/.npmrc
+web_dist/

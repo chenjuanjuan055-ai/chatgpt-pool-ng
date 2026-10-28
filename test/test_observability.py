@@ -32,6 +32,10 @@ class TaxonomyTest(unittest.TestCase):
         self.assertEqual(tax.classify("", status_code=503), tax.UPSTREAM)
         self.assertEqual(tax.classify("invalid request: missing model"), tax.CLIENT)
 
+    def test_pool_unavailable(self):
+        self.assertEqual(tax.classify("model 'gpt-5-6' is not available to any active account"), tax.POOL)
+        self.assertEqual(tax.classify('{"code":"no_healthy_account"}'), tax.POOL)
+
     def test_success_has_no_category(self):
         self.assertEqual(tax.classify("", status="success"), "")
 

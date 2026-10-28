@@ -11,6 +11,7 @@ RISK_CONTROL = "risk_control"
 UPSTREAM = "upstream"
 NETWORK = "network"
 CLIENT = "client"
+POOL = "pool"
 UNKNOWN = "unknown"
 
 LABELS = {
@@ -20,6 +21,7 @@ LABELS = {
     UPSTREAM: "上游异常",
     NETWORK: "网络/代理",
     CLIENT: "请求参数",
+    POOL: "号池无可用账号",
     UNKNOWN: "未知",
 }
 
@@ -30,6 +32,7 @@ HINTS = {
     UPSTREAM: "上游服务端错误，稍后重试",
     NETWORK: "连接/代理失败，检查出口池与网络",
     CLIENT: "请求参数不合法，检查入参",
+    POOL: "号池里没有可用账号承接该模型，检查账号健康与模型映射",
     UNKNOWN: "未分类错误，查看原文",
 }
 
@@ -88,6 +91,14 @@ _NETWORK_MARKERS = (
     "unreachable",
     "network",
 )
+_POOL_MARKERS = (
+    "not available to any active account",
+    "no available account",
+    "no_available_account",
+    "no healthy account",
+    "no_healthy_account",
+    "无可用账号",
+)
 _CLIENT_MARKERS = (
     "400",
     "422",
@@ -116,6 +127,10 @@ def classify(error_text: str = "", *, status_code: int | None = None, status: st
     for marker in _NETWORK_MARKERS:
         if marker in text:
             return NETWORK
+
+    for marker in _POOL_MARKERS:
+        if marker in text:
+            return POOL
 
     if status_code in (401, 403):
         return AUTH
