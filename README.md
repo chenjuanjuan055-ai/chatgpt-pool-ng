@@ -33,6 +33,23 @@
 
 ---
 
+## 界面预览
+
+> 截图中的邮箱与令牌已做脱敏处理。
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/accounts.png" alt="号池管理" /><br/><sub><b>号池管理</b>：账号列表、健康状态、额度与到期、批量刷新 / 重登 / 绑定身份验证器、系统可用模型</sub></td>
+    <td width="50%"><img src="docs/screenshots/monitor.png" alt="监控" /><br/><sub><b>监控</b>：账号健康分布、出口池探活与延迟、请求指标（成功率 / RPM / P50 / P95）、错误分类、按小时聚合</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/image.png" alt="生图" /><br/><sub><b>生图</b>：提示词直出，支持上传参考图、比例/张数选择，历史记录本地保留</sub></td>
+    <td><img src="docs/screenshots/debug.png" alt="调试" /><br/><sub><b>调试</b>：内置对话面板，模型下拉直接读系统模型目录，用于验证接口连通</sub></td>
+  </tr>
+</table>
+
+---
+
 ## 快速开始
 
 ### 源码运行
