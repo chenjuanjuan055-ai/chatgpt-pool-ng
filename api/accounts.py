@@ -33,6 +33,7 @@ from services.sub2api_service import (
     sub2api_config,
     sub2api_import_service,
 )
+from services.totp_bind_service import totp_bind_service
 
 
 
@@ -90,12 +91,20 @@ class AccountExportRequest(BaseModel):
     format: Literal["json", "zip"] = "json"
 
 
+class TotpBindRequest(BaseModel):
+    access_tokens: list[str] = Field(default_factory=list)
+    mail_api: str = ""
+    headless: bool = False
+
+
 class AccountUpdateRequest(BaseModel):
     access_token: str = ""
     type: str | None = None
     status: str | None = None
     quota: int | None = None
     proxy: str | None = None
+    password: str | None = None
+    totp_secret: str | None = None
 
 
 class CPAPoolCreateRequest(BaseModel):
@@ -441,6 +450,32 @@ def create_router() -> APIRouter:
             raise HTTPException(status_code=404, detail={"error": "progress not found"})
         return progress
 
+    @router.post("/api/accounts/totp/bind")
+    async def bind_totp_accounts(body: TotpBindRequest, authorization: str | None = Header(default=None)):
+        """对选中且尚未绑定验证器的账号执行 TOTP 绑定（真实浏览器登录 + 邮箱取码）。"""
+        require_admin(authorization)
+        access_tokens = []
+        for token in body.access_tokens:
+            token = str(token or "").strip()
+            if not token:
+                continue
+            account = account_service.get_account(token) or {}
+            if str(account.get("totp_secret") or "").strip():
+                continue
+            access_tokens.append(token)
+        if not access_tokens:
+            raise HTTPException(status_code=400, detail={"error": "选中账号里没有待绑定的账号（都已经绑定过，或未选中）"})
+        job_id = totp_bind_service.start(access_tokens, mail_api=body.mail_api.strip(), headless=body.headless)
+        return {"job_id": job_id, "total": len(access_tokens)}
+
+    @router.get("/api/accounts/totp/bind/{job_id}")
+    async def get_bind_totp_progress(job_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        job = totp_bind_service.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail={"error": "job not found"})
+        return job
+
     @router.post("/api/accounts/export")
     async def export_accounts(body: AccountExportRequest, authorization: str | None = Header(default=None)):
         require_admin(authorization)
@@ -474,7 +509,18 @@ def create_router() -> APIRouter:
         access_token = str(body.access_token or "").strip()
         if not access_token:
             raise HTTPException(status_code=400, detail={"error": "access_token is required"})
-        updates = {key: value for key, value in {"type": body.type, "status": body.status, "quota": body.quota, "proxy": body.proxy}.items() if value is not None}
+        updates = {
+            key: value
+            for key, value in {
+                "type": body.type,
+                "status": body.status,
+                "quota": body.quota,
+                "proxy": body.proxy,
+                "password": body.password,
+                "totp_secret": body.totp_secret,
+            }.items()
+            if value is not None
+        }
         if not updates:
             raise HTTPException(status_code=400, detail={"error": "还没有检测到改动，请修改后再保存"})
         account = account_service.update_account(access_token, updates)

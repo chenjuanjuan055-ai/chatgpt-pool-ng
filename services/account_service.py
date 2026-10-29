@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import secrets
 import time
 import uuid
@@ -223,6 +224,16 @@ class AccountService:
         normalized["user_id"] = normalized.get("user_id") or None
         normalized["proxy"] = str(normalized.get("proxy") or "").strip()
         normalized["group_id"] = str(normalized.get("group_id") or "").strip()
+        password = str(normalized.get("password") or "").strip()
+        if password:
+            normalized["password"] = password
+        else:
+            normalized.pop("password", None)
+        totp_secret = str(normalized.get("totp_secret") or "").strip().replace(" ", "").upper()
+        if totp_secret:
+            normalized["totp_secret"] = totp_secret
+        else:
+            normalized.pop("totp_secret", None)
         source_type = normalized.get("source_type")
         if not source_type and str(normalized.get("export_type") or "").strip().lower() == "codex":
             source_type = "codex"
@@ -475,7 +486,9 @@ class AccountService:
     def _password_re_login_thread(self, access_token: str, email: str, password: str, event: str, progress_id: str | None = None) -> None:
         """密码重新登录线程入口"""
         try:
-            result = self._login_with_password(email, password)
+            account_snapshot = self.get_account(access_token) or {}
+            totp_secret = str(account_snapshot.get("totp_secret") or "").strip()
+            result = self._login_with_password(email, password, totp_secret=totp_secret)
             if result.get("ok"):
                 # 登录成功，更新账号
                 new_access_token = result.get("access_token", "")
@@ -584,7 +597,7 @@ class AccountService:
             if progress_id:
                 self.update_relogin_progress(progress_id, access_token, "异常", str(exc))
 
-    def _login_with_password(self, email: str, password: str) -> dict:
+    def _login_with_password(self, email: str, password: str, totp_secret: str = "") -> dict:
         """通过邮箱+密码登录，返回 {access_token, refresh_token, id_token, ...}"""
         from curl_cffi import requests
         
@@ -725,6 +738,48 @@ class AccountService:
                 elif "Invalid credentials" in error_msg or "wrong password" in error_msg.lower():
                     return {"ok": False, "error": "invalid_password", "detail": login_data}
                 return {"ok": False, "error": f"password_verify_failed_{login_resp.status_code}", "detail": login_data}
+            
+            # ─── 处理 TOTP 二次验证 ──────────────────────────
+            page_type_probe = ""
+            probe_page = login_data.get("page")
+            if isinstance(probe_page, dict):
+                page_type_probe = str(probe_page.get("type") or "").strip()
+            probe_continue = str(login_data.get("continue_url") or "").strip()
+            if "mfa" in page_type_probe.lower() or "mfa-challenge" in probe_continue.lower():
+                challenge_match = re.search(r"/mfa-challenge/([A-Za-z0-9_-]+)", probe_continue)
+                if not challenge_match:
+                    return {"ok": False, "error": "mfa_challenge_unresolved", "detail": login_data}
+                if not str(totp_secret or "").strip():
+                    return {"ok": False, "error": "mfa_required", "detail": login_data}
+                from services.totp_service import code as totp_code
+                challenge_id = challenge_match.group(1)
+                mfa_headers = dict(login_headers)
+                mfa_headers["referer"] = f"{auth_base}/mfa-challenge/{challenge_id}"
+                try:
+                    session.post(
+                        f"{auth_base}/api/accounts/mfa/issue_challenge",
+                        headers=mfa_headers,
+                        json={"id": challenge_id, "type": "totp", "force_fresh_challenge": False},
+                        timeout=30,
+                    )
+                except Exception:
+                    pass
+                try:
+                    verify_resp = session.post(
+                        f"{auth_base}/api/accounts/mfa/verify",
+                        headers=mfa_headers,
+                        json={"id": challenge_id, "type": "totp", "code": totp_code(totp_secret)},
+                        timeout=30,
+                    )
+                except Exception as exc:
+                    return {"ok": False, "error": "mfa_verify_exception", "detail": {"error": str(exc)}}
+                try:
+                    mfa_data = verify_resp.json() if verify_resp.text else {}
+                except Exception:
+                    mfa_data = {}
+                if verify_resp.status_code != 200:
+                    return {"ok": False, "error": f"mfa_verify_failed_{verify_resp.status_code}", "detail": mfa_data}
+                login_data = mfa_data
             
             # 获取 authorization code
             continue_url = str(login_data.get("continue_url") or "").strip()

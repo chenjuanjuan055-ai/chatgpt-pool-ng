@@ -17,6 +17,7 @@ import {
   Pencil,
   RefreshCw,
   Search,
+  ShieldCheck,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -43,11 +44,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  bindTotpAccounts,
   deleteAccounts,
   fetchAccounts,
   fetchModels,
   fetchRefreshProgress,
   fetchReLoginProgress,
+  fetchTotpBindProgress,
   reLoginAccounts,
   refreshAccounts,
   testProxy,
@@ -57,6 +60,7 @@ import {
   type AccountStatus,
   type Model,
   type RefreshProgressResponse,
+  type TotpBindJob,
 } from "@/lib/api";
 import { useAuthGuard } from "@/lib/use-auth-guard";
 import { cn } from "@/lib/utils";
@@ -186,6 +190,13 @@ function AccountsPageContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isRelogining, setIsRelogining] = useState(false);
+  const [isBindingTotp, setIsBindingTotp] = useState(false);
+  const [totpDialogOpen, setTotpDialogOpen] = useState(false);
+  const [totpResultOpen, setTotpResultOpen] = useState(false);
+  const [mailApi, setMailApi] = useState(() =>
+    typeof window === "undefined" ? "" : window.localStorage.getItem("totp_mail_api") || "http://127.0.0.1:19878",
+  );
+  const [totpResults, setTotpResults] = useState<TotpBindJob["results"]>([]);
   const [progress, setProgress] = useState<{
     visible: boolean;
     current: number;
@@ -524,6 +535,69 @@ function AccountsPageContent() {
     });
   };
 
+  const pendingTotpTokens = useMemo(() => {
+    return selectedTokens.filter((token) => {
+      const account = accounts.find((item) => item.access_token === token);
+      return Boolean(account) && !account?.totp_secret;
+    });
+  }, [accounts, selectedTokens]);
+
+  const handleBindTotp = async () => {
+    if (pendingTotpTokens.length === 0) {
+      toast.error("选中的账号里没有待绑定验证器的账号");
+      return;
+    }
+    if (!mailApi.trim()) {
+      toast.error("请先填写取码工具地址");
+      return;
+    }
+    window.localStorage.setItem("totp_mail_api", mailApi.trim());
+    setTotpDialogOpen(false);
+    setIsBindingTotp(true);
+    setProgress({
+      visible: true,
+      current: 0,
+      total: pendingTotpTokens.length,
+      message: "正在绑定验证器，浏览器窗口会自动操作，请勿关闭…",
+      email: "",
+    });
+    try {
+      const { job_id } = await bindTotpAccounts(pendingTotpTokens, mailApi.trim());
+      const job = await new Promise<TotpBindJob>((resolve, reject) => {
+        const timer = setInterval(async () => {
+          try {
+            const current = await fetchTotpBindProgress(job_id);
+            setProgress((prev) => ({
+              ...prev,
+              current: current.processed,
+              email: current.results[current.results.length - 1]?.email ?? "",
+            }));
+            if (current.done) {
+              clearInterval(timer);
+              resolve(current);
+            }
+          } catch (error) {
+            clearInterval(timer);
+            reject(error);
+          }
+        }, 2000);
+      });
+      if (job.error) {
+        throw new Error(job.error);
+      }
+      setTotpResults(job.results);
+      setTotpResultOpen(true);
+      const succeeded = job.results.filter((item) => item.status === "成功").length;
+      toast.success(`验证器绑定完成：成功 ${succeeded} / ${job.results.length}`);
+      await loadAccounts(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "绑定验证器失败");
+    } finally {
+      setIsBindingTotp(false);
+      setTimeout(() => setProgress({ visible: false, current: 0, total: 0, message: "", email: "" }), 800);
+    }
+  };
+
   const handleReLogin = async (accessTokens: string[]) => {
     if (accessTokens.length === 0) {
       toast.error("请先选择要恢复的账户");
@@ -777,6 +851,96 @@ function AccountsPageContent() {
         </div>
       )}
 
+      <Dialog open={totpDialogOpen} onOpenChange={setTotpDialogOpen}>
+        <DialogContent className="rounded-2xl p-6">
+          <DialogHeader className="gap-2">
+            <DialogTitle>绑定身份验证器</DialogTitle>
+            <DialogDescription className="text-sm leading-6">
+              对选中的 {pendingTotpTokens.length} 个未绑定账号执行：浏览器登录 → 取邮箱验证码 → 开启 TOTP。
+              流程需要真实浏览器窗口，过程中会自动弹窗，请不要关闭。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-600">取码工具地址</label>
+            <Input
+              value={mailApi}
+              onChange={(event) => setMailApi(event.target.value)}
+              placeholder="http://127.0.0.1:19878"
+            />
+            <p className="text-xs text-stone-400">
+              本机 msa-mail-tool 的监听地址，用于自动读取邮箱登录验证码。
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setTotpDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={() => void handleBindTotp()} disabled={isBindingTotp}>
+              {isBindingTotp ? <LoaderCircle className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+              开始绑定
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={totpResultOpen} onOpenChange={setTotpResultOpen}>
+        <DialogContent className="rounded-2xl p-6">
+          <DialogHeader className="gap-2">
+            <DialogTitle>验证器绑定结果</DialogTitle>
+            <DialogDescription className="text-sm leading-6">
+              密钥请立刻录入验证器 App（KeePassXC 或手机端），号池里也存了一份。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[360px] space-y-2 overflow-y-auto">
+            {totpResults.map((item) => (
+              <div
+                key={`${item.token}-${item.email}`}
+                className="rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium text-stone-700">{item.email || item.token}</span>
+                  <span className={cn("shrink-0 text-xs", item.status === "成功" ? "text-emerald-600" : "text-rose-500")}>
+                    {item.status}
+                  </span>
+                </div>
+                {item.status === "成功" ? (
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <code className="truncate text-xs text-stone-500">{item.secret}</code>
+                    <Button
+                      variant="ghost"
+                      className="h-7 shrink-0 rounded-lg px-2 text-xs text-stone-500"
+                      onClick={() => void navigator.clipboard.writeText(item.secret || "")}
+                    >
+                      <Copy className="size-3.5" />
+                      复制
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-rose-500">{item.error}</p>
+                )}
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                const lines = totpResults
+                  .filter((item) => item.status === "成功")
+                  .map((item) => `${item.email}|${item.secret}`)
+                  .join("\n");
+                void navigator.clipboard.writeText(lines);
+                toast.success("已复制全部密钥");
+              }}
+            >
+              <Copy className="size-4" />
+              复制全部密钥
+            </Button>
+            <Button onClick={() => setTotpResultOpen(false)}>完成</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(editingAccount)} onOpenChange={(open) => (!open ? setEditingAccount(null) : null)}>
         <DialogContent showCloseButton={false} className="rounded-2xl p-6">
           <DialogHeader className="gap-2">
@@ -1010,6 +1174,22 @@ function AccountsPageContent() {
                 </Button>
                 <Button
                   variant="ghost"
+                  className="h-8 rounded-lg px-3 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                  onClick={() => {
+                    if (pendingTotpTokens.length === 0) {
+                      toast.error("选中的账号里没有待绑定验证器的账号");
+                      return;
+                    }
+                    setTotpDialogOpen(true);
+                  }}
+                  disabled={selectedTokens.length === 0 || isBindingTotp}
+                  title="给选中且未绑定验证器的账号开启 TOTP 二次验证"
+                >
+                  {isBindingTotp ? <LoaderCircle className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                  绑定身份验证器
+                </Button>
+                <Button
+                  variant="ghost"
                   className="h-8 rounded-lg px-3 text-rose-500 hover:bg-rose-50 hover:text-rose-600"
                   onClick={() => void handleDeleteTokens(abnormalTokens)}
                   disabled={abnormalTokens.length === 0 || isDeleting}
@@ -1117,7 +1297,14 @@ function AccountsPageContent() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="text-xs leading-5 text-stone-500">{account.email ?? "—"}</div>
+                          <div className="flex items-center gap-1.5 text-xs leading-5 text-stone-500">
+                            <span>{account.email ?? "—"}</span>
+                            {account.totp_secret ? (
+                              <span title="已绑定身份验证器">
+                                <ShieldCheck className="size-3.5 text-emerald-500" />
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-xs leading-5 text-stone-500">
                           {(() => {

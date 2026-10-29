@@ -4,6 +4,10 @@
 
 ## 1.9.0 - 2026-10-28
 
++ [新增] 账号页「绑定身份验证器」：勾选未绑定账号后批量开启 TOTP（真实浏览器登录 → 自动读取邮箱验证码 → enroll + activate），密钥写入账号记录并在结果弹窗展示。
++ [新增] 接口 `POST /api/accounts/totp/bind`、`GET /api/accounts/totp/bind/{job_id}`；账号绑定状态在列表中用盾牌图标标识。
++ [新增] 密码重登支持 TOTP 二次验证（`/mfa-challenge` 自动算码），账号新增 `totp_secret` 字段。
+
 + [新增] 出口池：多出口健康探测（200/401 视为可达）、EWMA 延迟选路、传输失败自动切换、连续失败冷却后自动恢复。
 + [新增] 出口池配置 `proxy_runtime.egress_pool`，支持 `probe_interval`、`failure_threshold`、`cooldown_sec`、`max_attempts`。
 + [新增] 出口池接口：`GET /api/proxy/egress`、`POST /api/proxy/egress/probe`、`POST /api/proxy/egress/settings`。

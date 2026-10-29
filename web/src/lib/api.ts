@@ -37,6 +37,22 @@ export type Account = {
   image_inflight?: number;
   last_used_at?: string | null;
   proxy?: string | null;
+  totp_secret?: string | null;
+};
+
+export type TotpBindJob = {
+  job_id: string;
+  total: number;
+  processed: number;
+  done: boolean;
+  error: string;
+  results: Array<{
+    token: string;
+    email?: string;
+    status: string;
+    secret?: string;
+    error?: string;
+  }>;
 };
 
 export type AccountImportPayload = {
@@ -394,6 +410,17 @@ export async function reLoginAccounts(accessTokens: string[]) {
 
 export async function fetchReLoginProgress(progressId: string) {
   return httpRequest<RefreshProgressResponse>(`/api/accounts/re-login/progress/${progressId}`);
+}
+
+export async function bindTotpAccounts(accessTokens: string[], mailApi: string, headless = false) {
+  return httpRequest<{ job_id: string; total: number }>("/api/accounts/totp/bind", {
+    method: "POST",
+    body: { access_tokens: accessTokens, mail_api: mailApi, headless },
+  });
+}
+
+export async function fetchTotpBindProgress(jobId: string) {
+  return httpRequest<TotpBindJob>(`/api/accounts/totp/bind/${jobId}`);
 }
 
 export async function updateAccount(
