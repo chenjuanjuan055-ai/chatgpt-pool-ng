@@ -14,3 +14,4 @@ web_dist/
 totp_results.txt
 _tmp/
 utils/output/
+config.json

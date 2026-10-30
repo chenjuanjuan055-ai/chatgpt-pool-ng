@@ -1063,3 +1063,458 @@ export type ModelCatalogResponse = {
 export async function fetchModelCatalog() {
   return httpRequest<ModelCatalogResponse>("/api/model-catalog");
 }
+
+export type UpstreamProvider = {
+  id: string;
+  name: string;
+  type: string;
+  base_url: string;
+  api_key?: string;
+  api_key_masked?: string;
+  models: string[];
+  enabled: boolean;
+  priority: number;
+  notes?: string;
+  last_probe?: {
+    ok?: boolean;
+    status?: number;
+    latency_ms?: number;
+    models_count?: number;
+    error?: string;
+    probed_at?: number;
+  } | null;
+};
+
+export async function fetchProviders() {
+  return httpRequest<{ items: UpstreamProvider[] }>("/api/providers");
+}
+
+export async function probeProviders(providerId = "") {
+  return httpRequest<{ results: UpstreamProvider[]; items: UpstreamProvider[] }>(
+    `/api/providers/probe${providerId ? `?provider_id=${encodeURIComponent(providerId)}` : ""}`,
+    { method: "POST", body: {} },
+  );
+}
+
+export type GrokSummary = {
+  total?: number;
+  available?: number;
+  attention?: number;
+  recovering?: number;
+  risk?: number;
+  issues?: Record<string, number>;
+  recovery?: Record<string, number>;
+  providers?: Record<string, { total?: number; available?: number }>;
+};
+
+export type GrokAccount = {
+  id: string;
+  provider: string;
+  name: string;
+  email?: string;
+  enabled: boolean;
+  authStatus?: string;
+  priority?: number;
+  maxConcurrent?: number;
+  failureCount?: number;
+  lastError?: string;
+  createdAt?: string;
+  refreshable?: boolean;
+  quota?: { used?: number; limit?: number; remaining?: number; usagePercent?: number; limitKnown?: boolean };
+  quotaWindows?: Array<{ mode?: string; remaining?: number; total?: number; resetAt?: string }>;
+};
+
+export type GrokKey = {
+  id: string;
+  name: string;
+  prefix: string;
+  enabled: boolean;
+  rpmLimit: number;
+  maxConcurrent: number;
+  lastUsedAt?: string;
+  billedUsageUsdTicks?: number;
+};
+
+export async function fetchGrokOverview() {
+  return httpRequest<{ summary: GrokSummary; keys: number }>("/api/grok/overview");
+}
+
+export async function fetchGrokAccounts(params: { page?: number; pageSize?: number; q?: string; provider?: string; authStatus?: string }) {
+  const search = new URLSearchParams();
+  search.set("page", String(params.page ?? 1));
+  search.set("page_size", String(params.pageSize ?? 20));
+  if (params.q) search.set("q", params.q);
+  if (params.provider) search.set("provider", params.provider);
+  if (params.authStatus) search.set("auth_status", params.authStatus);
+  return httpRequest<{ items: GrokAccount[]; total: number; page: number; pageSize: number }>(`/api/grok/accounts?${search.toString()}`);
+}
+
+export async function fetchGrokKeys() {
+  return httpRequest<{ items: GrokKey[] }>("/api/grok/keys");
+}
+
+export async function createGrokKey(
+  name: string,
+  options: { rpmLimit?: number; maxConcurrent?: number; billingLimitUsd?: number; allowedModels?: string[] } = {},
+) {
+  return httpRequest<{ key?: GrokKey; secret?: string }>("/api/grok/keys", {
+    method: "POST",
+    body: { name, ...options },
+  });
+}
+
+export async function grokAccountScript(accountId: string, action: string) {
+  return httpRequest<{ ok: boolean }>(`/api/grok/accounts/${accountId}/script`, { method: "POST", body: { action } });
+}
+
+export async function grokEgressCreate(payload: Record<string, unknown>) {
+  return httpRequest<Record<string, unknown>>("/api/grok/egress", { method: "POST", body: payload });
+}
+
+export async function grokEgressUpdate(id: string, payload: Record<string, unknown>) {
+  return httpRequest<Record<string, unknown>>(`/api/grok/egress/${id}`, { method: "PUT", body: payload });
+}
+
+export async function grokEgressDelete(id: string) {
+  return httpRequest<{ ok: boolean }>(`/api/grok/egress/${id}`, { method: "DELETE" });
+}
+
+export async function grokEgressTest(ids: string[] = []) {
+  return httpRequest<Record<string, unknown>>("/api/grok/egress/test", { method: "POST", body: { ids } });
+}
+
+export async function grokSpeech(payload: Record<string, unknown>): Promise<Blob> {
+  const key = await (await import("@/store/auth")).getStoredAuthKey();
+  const response = await fetch("/api/grok/speech", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error((await response.text()).slice(0, 200));
+  }
+  return response.blob();
+}
+
+export async function grokGenerate(kind: "image" | "video", payload: Record<string, unknown>) {
+  return httpRequest<Record<string, unknown>>(`/api/grok/${kind}/generate`, {
+    method: "POST",
+    body: payload,
+    timeout: 600000,
+  });
+}
+
+export async function grokChat(payload: Record<string, unknown>) {
+  return httpRequest<Record<string, unknown>>("/api/grok/chat", {
+    method: "POST",
+    body: payload,
+    timeout: 300000,
+  });
+}
+
+export async function revealGrokKey(id: string) {
+  return httpRequest<{ secret: string }>(`/api/grok/keys/${id}/secret`);
+}
+
+export async function patchGrokKey(id: string, payload: Record<string, unknown>) {
+  return httpRequest<Record<string, unknown>>(`/api/grok/keys/${id}`, { method: "PATCH", body: payload });
+}
+
+export async function deleteGrokKey(id: string) {
+  return httpRequest<{ ok: boolean }>(`/api/grok/keys/${id}`, { method: "DELETE" });
+}
+
+export async function fetchGrokModels() {
+  return httpRequest<{ items: Array<{ id: string }> }>("/api/grok/models");
+}
+
+export type GrokAudit = {
+  id: string;
+  requestId: string;
+  clientKeyName?: string;
+  modelPublicId?: string;
+  provider?: string;
+  status?: string;
+  createdAt?: string;
+  durationMs?: number;
+  totalTokens?: number;
+};
+
+export type GrokEgressNode = {
+  id: string;
+  name?: string;
+  kind?: string;
+  host?: string;
+  enabled?: boolean;
+  status?: string;
+  lastError?: string;
+  accountCount?: number;
+  proxyDisplay?: string;
+  proxyConfigured?: boolean;
+  health?: string;
+  probeStatus?: string;
+  probeLatencyMs?: number;
+  exitIp?: string;
+  assignedAccountCount?: number;
+  accountCapacity?: number;
+  failureCount?: number;
+};
+
+export async function fetchGrokAudits(page = 1, pageSize = 20) {
+  return httpRequest<{ items: GrokAudit[]; total?: number }>(`/api/grok/audits?page=${page}&page_size=${pageSize}`);
+}
+
+export async function fetchGrokEgress(page = 1, pageSize = 20) {
+  return httpRequest<{ items: GrokEgressNode[]; total?: number }>(`/api/grok/egress?page=${page}&page_size=${pageSize}`);
+}
+
+export async function toggleGrokAccount(id: string, enabled: boolean) {
+  return httpRequest<{ ok: boolean }>(`/api/grok/accounts/${id}/toggle`, { method: "POST", body: { enabled } });
+}
+
+export async function grokAccountBatch(action: string, ids: string[], provider: string) {
+  return httpRequest<{ ok: boolean; count: number }>("/api/grok/accounts/batch", {
+    method: "POST",
+    body: { action, ids, provider },
+  });
+}
+
+export type GrokModelRoute = {
+  id: string;
+  publicId: string;
+  provider: string;
+  upstreamModel: string;
+  capability?: string;
+  enabled?: boolean;
+};
+
+export async function fetchGrokModelRoutes() {
+  return httpRequest<{ items: GrokModelRoute[] }>("/api/grok/model-routes");
+}
+
+export async function grokDeviceStart(email: string, password: string) {
+  return httpRequest<{ sessionId: string; userCode?: string; verificationUri?: string; intervalSeconds?: number; expiresAt?: string }>(
+    "/api/grok/accounts/device/start",
+    { method: "POST", body: { email, password } },
+  );
+}
+
+export async function grokDevicePoll(sessionId: string) {
+  return httpRequest<{ status?: string; accountId?: string; error?: string }>("/api/grok/accounts/device/poll", {
+    method: "POST",
+    body: { session_id: sessionId },
+  });
+}
+
+export async function grokAccountOps(payload: {
+  action: string;
+  provider?: string;
+  ids?: string[];
+  statuses?: string[];
+}) {
+  return httpRequest<Record<string, unknown>>("/api/grok/accounts/ops", { method: "POST", body: payload });
+}
+
+export async function grokExportAccounts(provider: string) {
+  return httpRequest<{ content: string }>(`/api/grok/accounts/export?provider=${encodeURIComponent(provider)}&limit=500`);
+}
+
+export async function grokImportAccounts(file: File, provider: string) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("provider", provider);
+  const base = process.env.NEXT_PUBLIC_API_BASE || "";
+  const key = (await import("@/store/auth")).getStoredAuthKey;
+  const auth = await key();
+  const response = await fetch(`${base}/api/grok/accounts/import`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${auth}` },
+    body: form,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text.slice(0, 200));
+  }
+  return (await response.json()) as { stream: string };
+}
+
+export type GrokMedia = {
+  id: string;
+  kind?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  url?: string;
+  createdAt?: string;
+};
+
+export async function fetchGrokMedia(page = 1, pageSize = 24) {
+  return httpRequest<{ items: GrokMedia[]; total?: number }>(`/api/grok/media?page=${page}&page_size=${pageSize}`);
+}
+
+export type GrokDashboard = {
+  period: string;
+  range: { start: string; end: string };
+  resources: {
+    activeAccounts: number; totalAccounts: number; buildAccounts: number;
+    webAccounts: number; consoleAccounts: number; enabledModels: number;
+    totalModels: number; activeClientKeys: number; totalClientKeys: number;
+  };
+  usage: {
+    requests: number; successfulRequests: number; failedRequests: number;
+    inputTokens: number; cachedInputTokens: number; outputTokens: number;
+    reasoningTokens: number; tokens: number; billedCostUsdTicks: number;
+    successRate: number; averageFirstTokenMs: number; outputTokensPerSecond: number;
+  };
+  series: Array<{ start: string; end: string; requests: number; tokens: number; billedCostUsdTicks: number }>;
+  activity: Array<{ start: string; requests: number }>;
+  topModels: Array<{ model: string; requests: number; tokens: number; inputTokens: number; outputTokens: number; billedCostUsdTicks: number }>;
+  providers: Array<{ provider: string; requests: number; successfulRequests: number; tokens: number }>;
+};
+
+export async function fetchGrokDashboard(period = "24h") {
+  return httpRequest<GrokDashboard>(`/api/grok/dashboard?range=${period}`);
+}
+
+export async function fetchGrokVideos(page = 1, pageSize = 24) {
+  return httpRequest<{ items: Array<{ id: string; model?: string; prompt?: string; status?: string; url?: string }> }>(`/api/grok/videos?page=${page}&page_size=${pageSize}`);
+}
+
+export async function fetchGrokGuard() {
+  return httpRequest<{ available?: boolean; [key: string]: unknown }>("/api/grok/guard");
+}
+
+export async function grokBindEgress(accountId: string, egressNodeId: string, mode = "manual") {
+  return httpRequest<{ ok: boolean }>(`/api/grok/accounts/${accountId}/egress`, {
+    method: "POST",
+    body: { egress_node_id: egressNodeId, mode },
+  });
+}
+
+export async function grokUpdateModelRoute(routeId: string, payload: Record<string, unknown>) {
+  return httpRequest<Record<string, unknown>>(`/api/grok/model-routes/${routeId}`, { method: "PATCH", body: payload });
+}
+
+export async function grokVideoStatus(videoId: string) {
+  return httpRequest<Record<string, unknown>>(`/api/grok/videos/${videoId}`, { timeout: 120000 });
+}
+
+export type GrokEvent = { ts: number; kind: string; message: string; detail?: string };
+
+export async function fetchGrokEvents(since = 0) {
+  return httpRequest<{ items: GrokEvent[]; now: number }>(`/api/grok/events?since=${since}`);
+}
+
+export type RegisterJob = {
+  running?: boolean;
+  target?: number;
+  success?: number;
+  fail?: number;
+  pending?: number;
+  warnings?: number;
+  uncertain?: number;
+  cancelled?: boolean;
+  accounts_file?: string;
+  started_at?: number | null;
+  finished_at?: number | null;
+  error?: string;
+};
+
+export type RegisterConfig = {
+  register_count?: number;
+  multi_thread_enabled?: boolean;
+  multi_thread_workers?: number;
+  cpa_headless?: boolean;
+  cpa_force_standalone?: boolean;
+  email_provider?: string;
+  defaultDomains?: string;
+  cloudflare_api_base?: string;
+};
+
+export async function fetchRegisterStatus() {
+  return httpRequest<{ job: RegisterJob; config: RegisterConfig }>("/api/register/status");
+}
+
+export async function fetchRegisterLogs(after = 0) {
+  return httpRequest<{ latest: number; entries: { seq: number; line: string }[] }>(
+    `/api/register/logs?after=${after}`,
+  );
+}
+
+export async function updateRegisterConfig(payload: RegisterConfig) {
+  return httpRequest<{ config: RegisterConfig }>("/api/register/config", {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export async function startRegister() {
+  return httpRequest<{ ok: boolean; target?: number; accounts_file?: string }>("/api/register/start", {
+    method: "POST",
+    timeout: 90000,
+  });
+}
+
+export async function stopRegister() {
+  return httpRequest<{ ok: boolean; stopped?: boolean }>("/api/register/stop", {
+    method: "POST",
+    timeout: 60000,
+  });
+}
+
+export async function testRegisterPool() {
+  return httpRequest<{
+    nodes: { proxy: string; probe_status: string; exit_ip: string; latency_ms: number; error: string }[];
+    capacity?: number;
+  }>("/api/register/pool/test", { method: "POST", timeout: 200000 });
+}
+
+export async function reloadRegisterPool() {
+  return httpRequest<Record<string, unknown>>("/api/register/pool/reload", {
+    method: "POST",
+    timeout: 60000,
+  });
+}
+
+export async function fetchRegisterSettings() {
+  return httpRequest<{ settings: { base_url: string }; reachable: boolean; detail?: string }>(
+    "/api/register/settings",
+  );
+}
+
+export async function saveRegisterSettings(payload: { base_url: string }) {
+  return httpRequest<{ settings: { base_url: string } }>("/api/register/settings", {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export async function fetchRegisterPoolContent() {
+  return httpRequest<{ lines: string[]; path: string }>("/api/register/pool/content");
+}
+
+export async function saveRegisterPoolContent(lines: string[], apply = true) {
+  return httpRequest<{ lines: string[]; path: string; config?: Record<string, unknown> }>(
+    "/api/register/pool/content",
+    { method: "PUT", body: { lines, apply }, timeout: 90000 },
+  );
+}
+
+export type GrokMediaInput = { fileId?: string; file_id?: string; kind?: string; url?: string };
+
+export async function uploadGrokMedia(file: File) {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return httpRequest<GrokMediaInput>("/api/grok/media/upload", {
+    method: "POST",
+    body: form,
+    timeout: 180000,
+  });
+}
+
+export async function importGrokMedia(url: string) {
+  return httpRequest<GrokMediaInput>("/api/grok/media/import", {
+    method: "POST",
+    body: { url },
+    timeout: 120000,
+  });
+}

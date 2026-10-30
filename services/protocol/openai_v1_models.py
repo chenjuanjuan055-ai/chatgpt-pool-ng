@@ -54,4 +54,5 @@ def list_models() -> dict[str, Any]:
                 "root": model,
                 "parent": None,
             })
+
     return result

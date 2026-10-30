@@ -73,6 +73,7 @@ request.interceptors.response.use(
 );
 
 type RequestOptions = {
+    timeout?: number;
     method?: string;
     body?: unknown;
     headers?: Record<string, string>;
@@ -80,13 +81,14 @@ type RequestOptions = {
 };
 
 export async function httpRequest<T>(path: string, options: RequestOptions = {}) {
-    const {method = "GET", body, headers, redirectOnUnauthorized = true} = options;
+    const {method = "GET", body, headers, redirectOnUnauthorized = true, timeout} = options;
     const config: RequestConfig = {
         url: path,
         method,
         data: body,
         headers,
         redirectOnUnauthorized,
+        ...(timeout ? {timeout} : {}),
     };
     const response = await request.request<T>(config);
     return response.data;

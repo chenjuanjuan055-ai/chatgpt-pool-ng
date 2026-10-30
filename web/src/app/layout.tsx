@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Toaster } from "sonner";
 import "./globals.css";
 import { ThemeScript } from "@/components/theme-script";
-import { TopNav } from "@/components/top-nav";
+import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
   title: "ChatGPT 号池",
@@ -38,12 +38,7 @@ export default function RootLayout({
         }}
       >
         <Toaster position="top-center" richColors offset={48} />
-        <TopNav />
-        <main className="min-h-screen overflow-x-hidden bg-background text-foreground md:pl-60">
-          <div className="mx-auto box-border w-full max-w-[1440px] px-4 pb-6 pt-2 sm:px-6 lg:px-8">
-            {children}
-          </div>
-        </main>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

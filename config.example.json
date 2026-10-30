@@ -1,5 +1,5 @@
 {
-  "auth-key": "chatgpt2api",
+  "auth-key": "change-me-to-a-random-string",
   "refresh_account_interval_minute": 5,
   "image_retention_days": 15,
   "image_poll_timeout_secs": 120,
@@ -13,16 +13,28 @@
   ],
   "proxy": "",
   "proxy_runtime": {
-    "enabled": false,
+    "enabled": true,
     "egress_mode": "single_proxy",
-    "proxy_url": "http://privoxy:8118",
+    "proxy_url": "",
     "resource_proxy_url": "",
     "skip_ssl_verify": true,
     "reset_session_status_codes": [
       403
     ],
+    "egress_pool": {
+      "enabled": false,
+      "auto_failover": true,
+      "max_attempts": 3,
+      "probe_url": "https://chatgpt.com/backend-api/me",
+      "probe_interval": 120,
+      "timeout_sec": 10,
+      "failure_threshold": 2,
+      "cooldown_sec": 300,
+      "active_group": "",
+      "endpoints": []
+    },
     "clearance": {
-      "enabled": true,
+      "enabled": false,
       "mode": "flaresolverr",
       "cf_cookies": "",
       "cf_clearance": "",
@@ -104,5 +116,25 @@
       "url": "https://canvas.best"
     }
   },
-  "image_remove_conversation_after_result": true
+  "image_remove_conversation_after_result": true,
+  "upstream_providers": [
+    {
+      "id": "example",
+      "name": "Grok2API",
+      "type": "openai",
+      "base_url": "http://127.0.0.1:8002",
+      "api_key": "",
+      "models": [
+        "grok-4.7",
+        "grok-composer-2.5-fast",
+        "grok-chat-fast",
+        "grok-imagine-image",
+        "grok-imagine-image-2.0",
+        "grok-imagine-image-quality"
+      ],
+      "enabled": true,
+      "priority": 50,
+      "notes": "本地 grok2api 网关"
+    }
+  ]
 }

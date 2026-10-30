@@ -80,6 +80,52 @@ sudo APP_DIR=/opt/chatgpt-pool-ng bash deploy/install.sh
 
 脚本会创建 venv、安装依赖、写入 `/etc/systemd/system/chatgpt2api.service` 并启动。
 
+### VPS 部署
+
+控制台可以直接跑在 Linux VPS 上，和上游号池（如 grok2api / sub2api）同机部署，减少一层网络跳转。
+
+**方式一：Docker**
+
+```bash
+cp config.example.json config.json      # 修改 auth-key
+docker compose up -d                    # 默认映射 8000
+```
+
+**方式二：systemd**
+
+```bash
+sudo APP_DIR=/opt/chatgpt-pool-ng bash deploy/install.sh
+sudo systemctl status chatgpt2api
+```
+
+**部署要点**
+
+| 项 | 建议 |
+|---|---|
+| 配置 | 最低 1C2G；图片/视频任务多时 2C4G 起 |
+| 监听 | 只绑 `127.0.0.1:8000`，通过 Nginx / Caddy / Cloudflare Tunnel 对外 |
+| 鉴权 | `config.json` 的 `auth-key` 改成随机长串，不要用默认值 |
+| 上游 | 与 grok2api 同机时，控制台里填 `http://127.0.0.1:8002` 即可，无需隧道 |
+| 数据 | `data/` 目录挂载持久化（账号、密钥、事件）；备份 S3/R2 可选 |
+| 日志 | `logs/` 自动轮转；systemd 下用 `journalctl -u chatgpt2api -f` |
+
+---
+
+## 注册模块（可选）
+
+本项目**不内置注册**，只做号池管理与反代。注册由两个独立开源项目完成，二选一：
+
+| 方案 | 项目 | 浏览器 | 适用 |
+|---|---|---|---|
+| A | [AaronL725/grok-register](https://github.com/AaronL725/grok-register) | Chromium | 本机少量精跑、调试 |
+| B | [lij768423-svg/grok-register-panel](https://github.com/lij768423-svg/grok-register-panel) | Camoufox（Firefox 内核） | Linux VPS 无头、大批量挂机 |
+
+两者产出的凭据（build 的 CPA / web 的 SSO）都可以导入本控制台。控制台 **Grok → 注册** 页可以直接驱动方案 A 的 WebUI（填服务地址即可）。
+
+> 邮箱、代理出口、收信域名都需要使用者自备。**域名寿命约 2000 个号，单 IP 约 1–2 个号**，短时间猛刷会提前报废。
+
+完整的安装、配置项说明、已知坑（粘性代理、locale 强制、consent 的 `Next-Action` 解析等）见 **[docs/registration.md](docs/registration.md)**。
+
 ---
 
 ## 配置说明
