@@ -301,8 +301,15 @@ def format_image_result(
         if not b64_json:
             continue
         revised_prompt = str(item.get("revised_prompt") or prompt).strip() or prompt
-        image_data = convert_image_bytes(base64.b64decode(b64_json), fmt) if fmt else base64.b64decode(b64_json)
-        ext = image_extension_for_format(fmt) if fmt in ALLOWED_OUTPUT_FORMATS else sniff_image_extension(image_data)
+        raw = base64.b64decode(b64_json)
+        image_data = convert_image_bytes(raw, fmt) if fmt else raw
+        if image_data[:6] in (b"GIF87a", b"GIF89a"):
+            ext = ".gif"
+        elif fmt in ALLOWED_OUTPUT_FORMATS and fmt != "gif":
+            ext = image_extension_for_format(fmt)
+        else:
+            # gif 请求按真实字节落盘：上游可能混发 PNG 预览帧，避免改错扩展名
+            ext = sniff_image_extension(image_data)
         if response_format == "b64_json":
             data.append({
                 "b64_json": base64.b64encode(image_data).decode("ascii"),

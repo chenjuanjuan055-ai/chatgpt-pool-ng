@@ -14,6 +14,7 @@ from PIL import Image, ImageOps
 from services.config import config
 from services.image_storage_service import image_storage_service
 from services.image_tags_service import load_tags, remove_tags
+from utils.helper import image_mime_for_extension
 from utils.log import logger
 
 THUMBNAIL_SIZE = (320, 320)
@@ -56,9 +57,11 @@ def get_image_response(relative_path: str) -> FileResponse | Response:
         "Access-Control-Allow-Methods": "GET, OPTIONS",
         "Access-Control-Allow-Headers": "*",
     }
+    ext = Path(str(relative_path or "")).suffix.lower()
+    media_type = image_mime_for_extension(ext)
     if image_storage_service.has_local(relative_path):
-        return FileResponse(_safe_image_path(relative_path), headers=headers)
-    return Response(content=image_storage_service.get_bytes(relative_path), media_type="image/png", headers=headers)
+        return FileResponse(_safe_image_path(relative_path), media_type=media_type, headers=headers)
+    return Response(content=image_storage_service.get_bytes(relative_path), media_type=media_type, headers=headers)
 
 
 def _thumbnail_path(relative_path: str) -> Path:
