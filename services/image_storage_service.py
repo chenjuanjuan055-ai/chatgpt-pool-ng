@@ -18,7 +18,7 @@ from services.config import DATA_DIR, config
 
 IMAGE_INDEX_FILE = DATA_DIR / "image_index.json"
 IMAGE_INDEX_LOCK = Lock()
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 class ImageStorageError(RuntimeError):
@@ -196,15 +196,16 @@ class ImageStorageService:
             return f"{public_base_url.rstrip('/')}/{_safe_relative_path(rel)}"
         return f"{(base_url or config.base_url).rstrip('/')}/images/{_safe_relative_path(rel)}"
 
-    def make_relative_path(self, image_data: bytes) -> str:
+    def make_relative_path(self, image_data: bytes, ext: str = ".png") -> str:
         file_hash = hashlib.md5(image_data).hexdigest()
-        filename = f"{int(time.time())}_{file_hash}.png"
+        suffix = ext if str(ext or "").lower() in IMAGE_EXTENSIONS else ".png"
+        filename = f"{int(time.time())}_{file_hash}{suffix}"
         relative_dir = Path(time.strftime("%Y"), time.strftime("%m"), time.strftime("%d"))
         return f"{relative_dir.as_posix()}/{filename}"
 
-    def save(self, image_data: bytes, base_url: str | None = None) -> StoredImage:
+    def save(self, image_data: bytes, base_url: str | None = None, ext: str = ".png") -> StoredImage:
         config.cleanup_old_images()
-        rel = self.make_relative_path(image_data)
+        rel = self.make_relative_path(image_data, ext)
         mode = self.mode()
         if mode not in {"local", "webdav", "both"}:
             mode = "local"

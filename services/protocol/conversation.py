@@ -16,10 +16,15 @@ from services.config import config
 from services.image_storage_service import image_storage_service
 from services.openai_backend_api import ImageContentPolicyError, ImagePollTimeoutError, OpenAIBackendAPI
 from utils.helper import (
+    ALLOWED_OUTPUT_FORMATS,
     IMAGE_MODELS,
+    apply_output_format_hint,
+    convert_image_bytes,
     extract_image_from_message_content,
+    image_extension_for_format,
     is_codex_image_model,
     is_supported_image_model,
+    sniff_image_extension,
     split_image_model,
 )
 from utils.image_tokens import count_image_content_tokens
@@ -148,8 +153,8 @@ def encode_images(images: Iterable[tuple[bytes, str, str]]) -> list[str]:
     return [base64.b64encode(data).decode("ascii") for data, _, _ in images if data]
 
 
-def save_image_bytes(image_data: bytes, base_url: str | None = None) -> str:
-    return image_storage_service.save(image_data, base_url).url
+def save_image_bytes(image_data: bytes, base_url: str | None = None, ext: str | None = None) -> str:
+    return image_storage_service.save(image_data, base_url, ext=ext or sniff_image_extension(image_data)).url
 
 
 def message_text(content: Any) -> str:
@@ -214,12 +219,30 @@ def assistant_history_messages(messages: list[dict[str, Any]]) -> list[str]:
     return [str(item.get("content") or "") for item in messages if item.get("role") == "assistant" and item.get("content")]
 
 
-def build_image_prompt(prompt: str, size: str | None, quality: str = "auto") -> str:
+def build_image_prompt(
+        prompt: str,
+        size: str | None,
+        quality: str = "auto",
+        output_format: object = None,
+        frame_count: object = None,
+        frame_duration_ms: object = None,
+) -> str:
     hints = []
     if size:
         hints.append(f"输出图片尺寸为 {size}。")
     if quality:
         hints.append(f"输出图片质量为 {quality}。")
+    fmt = str(output_format or "").strip().lower()
+    if fmt in ALLOWED_OUTPUT_FORMATS:
+        if fmt == "gif":
+            line = "输出格式为 GIF 动图。"
+            if frame_count is not None:
+                line += f" frame_count={frame_count}。"
+            if frame_duration_ms is not None:
+                line += f" frame_duration_ms={frame_duration_ms}。"
+            hints.append(line)
+        else:
+            hints.append(f"输出图片格式为 {fmt.upper()}。")
     return f"{prompt.strip()}\n\n{''.join(hints)}" if hints else prompt
 
 
@@ -269,22 +292,26 @@ def format_image_result(
     base_url: str | None = None,
     created: int | None = None,
     message: str = "",
+    output_format: object = None,
 ) -> dict[str, Any]:
     data: list[dict[str, Any]] = []
+    fmt = str(output_format or "").strip().lower()
     for item in items:
         b64_json = str(item.get("b64_json") or "").strip()
         if not b64_json:
             continue
         revised_prompt = str(item.get("revised_prompt") or prompt).strip() or prompt
+        image_data = convert_image_bytes(base64.b64decode(b64_json), fmt) if fmt else base64.b64decode(b64_json)
+        ext = image_extension_for_format(fmt) if fmt in ALLOWED_OUTPUT_FORMATS else sniff_image_extension(image_data)
         if response_format == "b64_json":
             data.append({
-                "b64_json": b64_json,
-                "url": save_image_bytes(base64.b64decode(b64_json), base_url),
+                "b64_json": base64.b64encode(image_data).decode("ascii"),
+                "url": save_image_bytes(image_data, base_url, ext),
                 "revised_prompt": revised_prompt,
             })
         else:
             data.append({
-                "url": save_image_bytes(base64.b64decode(b64_json), base_url),
+                "url": save_image_bytes(image_data, base_url, ext),
                 "revised_prompt": revised_prompt,
             })
     result: dict[str, Any] = {"created": created or int(time.time()), "data": data}
@@ -307,6 +334,13 @@ class ConversationRequest:
     base_url: str | None = None
     message_as_error: bool = False
     progress_callback: Any = None  # Callable[[str], None] | None
+    output_format: str | None = None
+    frame_count: Any = None
+    frame_duration_ms: Any = None
+
+    @property
+    def upstream_prompt(self) -> str:
+        return apply_output_format_hint(self.prompt, self.output_format, self.frame_count, self.frame_duration_ms)
 
 
 @dataclass
@@ -689,12 +723,17 @@ def conversation_events(
     size: str | None = None,
     quality: str = "auto",
     thinking_effort: str = "",
+    output_format: object = None,
+    frame_count: object = None,
+    frame_duration_ms: object = None,
 ) -> Iterator[dict[str, Any]]:
     normalized = normalize_messages(messages or ([{"role": "user", "content": prompt}] if prompt else []))
     image_model = is_supported_image_model(model)
     history_text = "" if image_model else assistant_history_text(normalized)
     history_messages = [] if image_model else assistant_history_messages(normalized)
-    final_prompt = prompt_with_global_system(build_image_prompt(prompt, size, quality)) if image_model else prompt
+    final_prompt = prompt_with_global_system(
+        build_image_prompt(prompt, size, quality, output_format, frame_count, frame_duration_ms)
+    ) if image_model else prompt
     payloads = backend.stream_conversation(
         messages=normalized,
         model=model,
@@ -849,6 +888,9 @@ def stream_image_outputs(
             images=request.images or [],
             size=request.size,
             quality=request.quality,
+            output_format=request.output_format,
+            frame_count=request.frame_count,
+            frame_duration_ms=request.frame_duration_ms,
     ):
         last = event
         if event.get("type") == "conversation.delta":
@@ -1011,6 +1053,7 @@ def stream_image_outputs(
             request.response_format,
             request.base_url,
             int(time.time()),
+            output_format=request.output_format,
         )["data"]
         if data:
             yield ImageOutput(kind="result", model=request.model, index=index, total=total, data=data, conversation_id=conversation_id)
@@ -1108,6 +1151,7 @@ def stream_image_outputs(
                         request.response_format,
                         request.base_url,
                         int(time.time()),
+                        output_format=request.output_format,
                     )["data"]
                     if data:
                         yield ImageOutput(kind="result", model=request.model, index=index, total=total, data=data, conversation_id=conversation_id)
@@ -1220,6 +1264,7 @@ def stream_image_outputs(
                     request.response_format,
                     request.base_url,
                     int(time.time()),
+                    output_format=request.output_format,
                 )["data"]
                 if data:
                     yield ImageOutput(kind="result", model=request.model, index=index, total=total, data=data, conversation_id=conversation_id)
@@ -1267,7 +1312,7 @@ def stream_codex_image_outputs(
         total: int = 1,
 ) -> Iterator[ImageOutput]:
     images = _codex_response_images(list(backend.iter_codex_image_response_events(
-        prompt=request.prompt,
+        prompt=request.upstream_prompt,
         images=request.images or [],
         size=request.size,
         quality=request.quality,
@@ -1280,6 +1325,7 @@ def stream_codex_image_outputs(
         request.response_format,
         request.base_url,
         int(time.time()),
+        output_format=request.output_format,
     )["data"]
     if data:
         yield ImageOutput(kind="result", model=request.model, index=index, total=total, data=data)

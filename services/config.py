@@ -10,6 +10,16 @@ import time
 
 from services.storage.base import StorageBackend
 
+DEFAULT_GIF_MODELS = ["gpt-image-2.6", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"]
+
+
+def _is_supported_image_model(name: object) -> bool:
+    from utils.helper import is_supported_image_model as _impl
+    try:
+        return bool(_impl(name))
+    except Exception:
+        return False
+
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 CONFIG_FILE = BASE_DIR / "config.json"
@@ -741,6 +751,17 @@ class ConfigStore:
             return "0.0.0"
         return value or "0.0.0"
 
+    def get_gif_models(self) -> list[str]:
+        raw = self.data.get("gif_models")
+        if not isinstance(raw, list):
+            return list(DEFAULT_GIF_MODELS)
+        out: list[str] = []
+        for item in raw:
+            name = str(item or "").strip()
+            if name and name not in out and _is_supported_image_model(name):
+                out.append(name)
+        return out
+
     def get(self) -> dict[str, object]:
         data = dict(self.data)
         data["refresh_account_interval_minute"] = self.refresh_account_interval_minute
@@ -770,6 +791,7 @@ class ConfigStore:
         data["chat_completion_cache"] = self.get_chat_completion_cache_settings()
         data["proxy_runtime"] = self.get_public_proxy_runtime_settings()
         data["third_party_apps"] = self.get_third_party_apps_settings()
+        data["gif_models"] = self.get_gif_models()
         data.pop("auth-key", None)
         return data
 
@@ -816,6 +838,14 @@ class ConfigStore:
                 incoming_alerts = dict(incoming_alerts)
                 incoming_alerts["qq"] = merged_qq
             next_data["alerts"] = _normalize_alert_settings(incoming_alerts)
+        if "gif_models" in next_data:
+            raw_gif = next_data.get("gif_models")
+            cleaned: list[str] = []
+            for item in raw_gif if isinstance(raw_gif, list) else []:
+                name = str(item or "").strip()
+                if name and name not in cleaned and _is_supported_image_model(name):
+                    cleaned.append(name)
+            next_data["gif_models"] = cleaned if isinstance(raw_gif, list) else list(DEFAULT_GIF_MODELS)
         if "image_storage" in next_data:
             next_data["image_storage"] = _normalize_image_storage_settings(next_data.get("image_storage"))
             _validate_image_storage_settings(next_data["image_storage"])

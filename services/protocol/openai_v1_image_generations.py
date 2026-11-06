@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Iterator
 
+from fastapi import HTTPException
+
+from services.config import config
+from utils.helper import validate_output_format
+
 from services.protocol.conversation import (
     ConversationRequest,
     collect_image_outputs,
@@ -15,6 +20,11 @@ from utils.image_tokens import count_image_output_items_tokens, image_usage
 def handle(body: dict[str, Any]) -> dict[str, Any] | Iterator[dict[str, Any]]:
     prompt = str(body.get("prompt") or "")
     model = str(body.get("model") or "gpt-image-2")
+    output_format, fmt_error = validate_output_format(
+        model, body.get("output_format"), body.get("stream"), config.get_gif_models(),
+    )
+    if fmt_error:
+        raise HTTPException(status_code=400, detail={"error": fmt_error})
     n = int(body.get("n") or 1)
     size = body.get("size")
     quality = str(body.get("quality") or "auto")
@@ -31,6 +41,9 @@ def handle(body: dict[str, Any]) -> dict[str, Any] | Iterator[dict[str, Any]]:
         base_url=base_url,
         message_as_error=True,
         progress_callback=progress_callback,
+        output_format=output_format or None,
+        frame_count=body.get("frame_count"),
+        frame_duration_ms=body.get("frame_duration_ms"),
     ))
     if body.get("stream"):
         return stream_image_chunks(outputs)

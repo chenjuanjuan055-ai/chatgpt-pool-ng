@@ -19,7 +19,12 @@ WEB_IMAGE_MODELS = (
     "gpt-image-2.5",
     "gpt-image-2.5-flare",
     "gpt-image-2.5-sunburst",
+    "gpt-image-2.6",
+    "gpt-image-2.6-flare",
+    "gpt-image-2.6-sunburst",
 )
+DEFAULT_GIF_MODELS = ["gpt-image-2.6", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"]
+ALLOWED_OUTPUT_FORMATS = {"gif", "png", "jpg", "jpeg", "webp"}
 BASE_IMAGE_MODELS = {*WEB_IMAGE_MODELS, "codex-gpt-image-2"}
 IMAGE_MODEL_PLAN_TYPES = ("plus", "team", "pro")
 CODEX_IMAGE_MODEL = "codex-gpt-image-2"
@@ -490,3 +495,84 @@ def build_chat_image_markdown_content(image_result: dict[str, object]) -> str:
         if b64_json:
             markdown_images.append(f"![image_{index}](data:image/png;base64,{b64_json})")
     return "\n\n".join(markdown_images) if markdown_images else "Image generation completed."
+
+
+def image_extension_for_format(output_format: object) -> str:
+    """输出格式 → 文件扩展名（含点）。未知/空值按 png。"""
+    fmt = str(output_format or "").strip().lower()
+    return {"gif": ".gif", "jpg": ".jpg", "jpeg": ".jpg", "webp": ".webp"}.get(fmt, ".png")
+
+
+def image_mime_for_extension(ext: str) -> str:
+    return {".gif": "image/gif", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(
+        str(ext or "").lower(), "image/png"
+    )
+
+
+def sniff_image_extension(data: bytes) -> str:
+    """按魔数识别 GIF，其余维持 png 语义。"""
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    return ".png"
+
+
+def apply_output_format_hint(
+    prompt: str,
+    output_format: object,
+    frame_count: object = None,
+    frame_duration_ms: object = None,
+) -> str:
+    """给上游提示追加输出格式说明；不改原 prompt。未指定格式时原样返回。"""
+    fmt = str(output_format or "").strip().lower()
+    if fmt not in ALLOWED_OUTPUT_FORMATS:
+        return prompt
+    hint = f"Output format: {fmt.upper()}."
+    if fmt == "gif":
+        hint = "Output format: GIF (animated)."
+        if frame_count is not None:
+            hint += f" frame_count={frame_count}."
+        if frame_duration_ms is not None:
+            hint += f" frame_duration_ms={frame_duration_ms}."
+    return f"{prompt}\n\n{hint}"
+
+
+def convert_image_bytes(data: bytes, output_format: object) -> bytes:
+    """把单帧图片转换成目标格式；gif 原样返回（保留动画帧）。"""
+    fmt = str(output_format or "").strip().lower()
+    if fmt in ("", "gif") or fmt not in ALLOWED_OUTPUT_FORMATS:
+        return data
+    if sniff_image_extension(data) == ".gif":
+        return data
+    from io import BytesIO
+    from PIL import Image
+
+    target = "JPEG" if fmt in ("jpg", "jpeg") else fmt.upper()
+    with Image.open(BytesIO(data)) as image:
+        if target == "JPEG":
+            image = image.convert("RGB")
+        elif image.mode not in ("RGB", "RGBA"):
+            image = image.convert("RGBA")
+        buf = BytesIO()
+        image.save(buf, format=target)
+        return buf.getvalue()
+
+
+def validate_output_format(
+    model: object,
+    output_format: object,
+    stream: object = None,
+    gif_models: object = None,
+) -> tuple[str, str | None]:
+    """校验输出格式；返回 (归一化格式, 错误信息)。空格式表示未指定。"""
+    fmt = str(output_format or "").strip().lower()
+    if not fmt:
+        return "", None
+    if fmt not in ALLOWED_OUTPUT_FORMATS:
+        return "", f"unsupported output_format: {fmt}"
+    if fmt == "gif":
+        if stream:
+            return "", "output_format=gif does not support stream"
+        allowed = [str(item or "").strip() for item in (gif_models or [])]
+        if str(model or "").strip() not in allowed:
+            return "", "model is not allowed to output gif"
+    return fmt, None

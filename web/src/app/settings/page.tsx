@@ -9,6 +9,7 @@ import { useAuthGuard } from "@/lib/use-auth-guard";
 import { BackupSettingsCard } from "./components/backup-settings-card";
 import { ApiDocsCard } from "./components/api-docs-card";
 import { ConfigCard } from "./components/config-card";
+import { GifModelsCard } from "./components/gif-models-card";
 import { CPAPoolDialog } from "./components/cpa-pool-dialog";
 import { CPAPoolsCard } from "./components/cpa-pools-card";
 import { ImportBrowserDialog } from "./components/import-browser-dialog";
@@ -90,7 +91,10 @@ function SettingsPageContent() {
           </TabsList>
         </div>
         <TabsContent value="basic">
-          <ConfigCard />
+          <div className="space-y-6">
+            <ConfigCard />
+            <GifModelsCard />
+          </div>
         </TabsContent>
         <TabsContent value="proxy">
           <ProxyRuntimeCard />

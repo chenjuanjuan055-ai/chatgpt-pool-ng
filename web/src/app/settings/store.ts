@@ -307,6 +307,7 @@ type SettingsStore = {
   setLogLevel: (level: string, enabled: boolean) => void;
   setProxy: (value: string) => void;
   setBaseUrl: (value: string) => void;
+  setGifModels: (models: string[]) => void;
   setGlobalSystemPrompt: (value: string) => void;
   setDefaultUpstreamModelName: (value: string) => void;
   setDefaultThinkingEffort: (value: "auto" | "standard" | "extended" | "max") => void;
@@ -589,6 +590,20 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         config: {
           ...state.config,
           proxy: value,
+        },
+      };
+    });
+  },
+
+  setGifModels: (models) => {
+    set((state) => {
+      if (!state.config) {
+        return {};
+      }
+      return {
+        config: {
+          ...state.config,
+          gif_models: [...models],
         },
       };
     });

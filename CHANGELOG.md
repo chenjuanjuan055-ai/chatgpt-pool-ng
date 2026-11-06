@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.1-ng (2026-11-06)
+- 图片：新增 `gpt-image-2.6` / `gpt-image-2.6-flare` / `gpt-image-2.6-sunburst` 模型（上游 slug 走 `auto`）
+- 图片：新增 `output_format`（gif/png/jpg/jpeg/webp）与 `frame_count` / `frame_duration_ms` 参数
+- 图片：GIF 输出保留原始字节（.gif + image/gif，跳过转码），显式 png/jpg/webp 在本地转码后再存储
+- 设置：新增 `gif_models` 白名单（默认三个 2.6 模型），控制台设置页可逐项勾选
+- 校验：GIF 请求要求模型在白名单内，且不支持 `stream`
+
 本项目（ChatGPT 号池 / chatgpt-pool-ng）在 [basketikun/chatgpt2api](https://github.com/basketikun/chatgpt2api) v1.8.0（MIT）基础上二次开发，以下为本项目自己的版本记录。
 
 ## 1.9.0 - 2026-10-28

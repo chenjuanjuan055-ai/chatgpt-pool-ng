@@ -196,6 +196,7 @@ export type SettingsConfig = {
   auto_remove_rate_limited_accounts?: boolean;
   auto_relogin_after_refresh?: boolean;
   log_levels?: string[];
+  gif_models?: string[];
   image_storage?: ImageStorageSettings;
   proxy_runtime?: ProxyRuntimeSettings;
   third_party_apps?: ThirdPartyAppsSettings;
