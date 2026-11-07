@@ -62,6 +62,56 @@ function GrokNav() {
   );
 }
 
+function MinimaxNav() {
+  const pathname = usePathname() || "";
+  const items = [
+    { href: "/minimax", label: "仪表盘", icon: Gauge, match: () => pathname === "/minimax" },
+    { href: "/minimax/accounts", label: "账号", icon: Users, match: () => pathname.startsWith("/minimax/accounts") },
+    { href: "/minimax/keys", label: "密钥", icon: KeyRound, match: () => pathname.startsWith("/minimax/keys") },
+    { href: "/minimax/models", label: "模型", icon: Layers, match: () => pathname.startsWith("/minimax/models") },
+    { href: "/minimax/signin", label: "签到", icon: UserPlus, match: () => pathname.startsWith("/minimax/signin") },
+    { href: "/minimax/gallery", label: "图库", icon: Image, match: () => pathname.startsWith("/minimax/gallery") },
+    { href: "/minimax/audits", label: "请求审计", icon: FileText, match: () => pathname.startsWith("/minimax/audits") },
+    { href: "/minimax/settings", label: "连接设置", icon: ShieldCheck, match: () => pathname.startsWith("/minimax/settings") },
+  ];
+  return (
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-[#121826] text-slate-200 md:flex">
+      <div className="flex h-16 items-center gap-2 px-5">
+        <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/90 text-white">
+          <Boxes className="size-5" />
+        </div>
+        <div className="text-sm font-semibold tracking-tight">MiniMax 反代</div>
+      </div>
+      <nav className="flex-1 space-y-1 px-3 pt-2">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
+                item.match() ? "bg-emerald-500 text-white shadow-sm" : "text-slate-300 hover:bg-white/10",
+              )}
+            >
+              <Icon className="size-4" />
+              {item.label}
+            </Link>
+          );
+        })}
+        <Link
+          href="/"
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-400 transition-colors hover:bg-white/10"
+        >
+          <Home className="size-4" />
+          返回首页
+        </Link>
+      </nav>
+      <div className="px-5 pb-5 text-[11px] text-slate-500">v1.9.1-ng</div>
+    </aside>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
   const isLogin = pathname.startsWith("/login");
@@ -70,9 +120,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
   const isHome = pathname === "/";
   const isGrok = pathname.startsWith("/grok");
+  const isMinimax = pathname.startsWith("/minimax");
   return (
     <>
-      {isHome ? null : isGrok ? <GrokNav /> : <TopNav />}
+      {isHome ? null : isGrok ? <GrokNav /> : isMinimax ? <MinimaxNav /> : <TopNav />}
       <main
         className={cn(
           "min-h-screen overflow-x-hidden bg-background text-foreground",

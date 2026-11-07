@@ -1519,3 +1519,109 @@ export async function importGrokMedia(url: string) {
     timeout: 120000,
   });
 }
+
+/* ---------------------------------------------------------------- MiniMax */
+
+export type MinimaxSettings = {
+  base_url: string;
+  username: string;
+  password: string;
+  has_password: boolean;
+  auto_tunnel: boolean;
+  ssh_host: string;
+  ssh_remote_port: number;
+  ssh_local_port: number;
+  tunnel_running: boolean;
+};
+
+export type MinimaxStatus = {
+  base_url: string;
+  tunnel_running: boolean;
+  reachable: boolean;
+  configured: boolean;
+  error: string;
+};
+
+export type MinimaxAccount = {
+  id: string;
+  name?: string;
+  kind?: string;
+  region?: string;
+  status?: string;
+  enabled?: boolean;
+  priority?: number;
+  maxConcurrent?: number;
+  credit?: number;
+  lastUsedAt?: string;
+  createdAt?: string;
+  [key: string]: unknown;
+};
+
+export async function fetchMinimaxSettings() {
+  return httpRequest<{ settings: MinimaxSettings }>("/api/minimax/settings");
+}
+
+export async function saveMinimaxSettings(payload: Partial<MinimaxSettings>) {
+  return httpRequest<{ settings: MinimaxSettings }>("/api/minimax/settings", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function fetchMinimaxStatus() {
+  return httpRequest<MinimaxStatus>("/api/minimax/status");
+}
+
+export async function fetchMinimaxDashboard() {
+  return httpRequest<Record<string, any>>("/api/minimax/dashboard");
+}
+
+export async function fetchMinimaxAccounts(page = 1, pageSize = 20, q = "") {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (q) params.set("q", q);
+  return httpRequest<{ items: MinimaxAccount[]; total?: number }>(`/api/minimax/accounts?${params}`);
+}
+
+export async function fetchMinimaxKeys() {
+  return httpRequest<{ items: Array<Record<string, any>> }>("/api/minimax/keys");
+}
+
+export async function fetchMinimaxModels() {
+  return httpRequest<{ items: Array<Record<string, any>> }>("/api/minimax/models");
+}
+
+export async function fetchMinimaxAudits(page = 1, pageSize = 20) {
+  return httpRequest<{ items: Array<Record<string, any>> }>(
+    `/api/minimax/audits?page=${page}&page_size=${pageSize}`,
+  );
+}
+
+export async function fetchMinimaxSignin() {
+  return httpRequest<Record<string, any>>("/api/minimax/signin");
+}
+
+export async function fetchMinimaxGallery() {
+  return httpRequest<{ items: Array<Record<string, any>> }>("/api/minimax/gallery");
+}
+
+export async function minimaxAccountAction(accountId: string, action: string) {
+  return httpRequest<Record<string, any>>(`/api/minimax/accounts/${accountId}/${action}`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function minimaxAccountBatch(action: string, ids: string[]) {
+  return httpRequest<Record<string, any>>("/api/minimax/accounts/batch", {
+    method: "POST",
+    body: { action, ids },
+  });
+}
+
+export async function minimaxTunnel(action: "start" | "stop") {
+  return httpRequest<{ ok: boolean; tunnel_running: boolean }>(`/api/minimax/tunnel/${action}`, {
+    method: "POST",
+    body: {},
+  });
+}
+

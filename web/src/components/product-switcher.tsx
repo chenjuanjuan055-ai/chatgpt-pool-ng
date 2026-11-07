@@ -11,13 +11,14 @@ const PRODUCTS = [
   { key: "home", label: "默认首页", href: "/", match: (p: string) => p === "/" },
   { key: "gpt", label: "GPT", href: "/accounts", match: (p: string) => GPT_PAGES.some((page) => p.startsWith(page)) },
   { key: "grok", label: "Grok", href: "/grok", match: (p: string) => p.startsWith("/grok") },
+  { key: "minimax", label: "MiniMax", href: "/minimax", match: (p: string) => p.startsWith("/minimax") },
   { key: "deepseek", label: "DeepSeek", href: "/deepseek", match: (p: string) => p.startsWith("/deepseek") },
   { key: "trae", label: "Trae", href: "/trae", match: (p: string) => p.startsWith("/trae") },
   { key: "qoder", label: "Qoder", href: "/qoder", match: (p: string) => p.startsWith("/qoder") },
   { key: "workbuddy", label: "WorkBuddy", href: "/workbuddy", match: (p: string) => p.startsWith("/workbuddy") },
 ];
 
-const ENABLED = new Set(["home", "gpt", "grok"]);
+const ENABLED = new Set(["home", "gpt", "grok", "minimax"]);
 
 export function ProductSwitcher() {
   const pathname = usePathname() || "/";
