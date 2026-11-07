@@ -1,15 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LoaderCircle, RefreshCw, Search, Users } from "lucide-react";
+import { LoaderCircle, Download, RefreshCw, Search, Upload, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   fetchMinimaxAccounts,
   minimaxAccountAction,
   minimaxAccountBatch,
+  minimaxAccountDelete,
+  minimaxAccountsExport,
+  minimaxAccountsImport,
+  minimaxCleanup,
+  minimaxProbeAll,
+  minimaxQuotaAll,
   type MinimaxAccount,
 } from "@/lib/api";
 import { useAuthGuard } from "@/lib/use-auth-guard";
@@ -33,6 +40,8 @@ export default function MinimaxAccountsPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [importText, setImportText] = useState("");
 
   const load = async (target = page, keyword = q) => {
     setLoading(true);
@@ -48,6 +57,38 @@ export default function MinimaxAccountsPage() {
       setLoading(false);
     }
   };
+
+  const runJob = async (label: string, fn: () => Promise<unknown>) => {
+    setBusy(label);
+    setError("");
+    try {
+      await fn();
+      await load(page, q);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `${label} 失败`);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const exportAccounts = () =>
+    runJob("导出", async () => {
+      const data = await minimaxAccountsExport("json", 500);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `minimax-accounts-${Date.now()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+
+  const importAccounts = () =>
+    runJob("导入", async () => {
+      if (!importText.trim()) throw new Error("请先粘贴账号数据");
+      await minimaxAccountsImport({ data: importText.trim() });
+      setImportText("");
+    });
 
   useEffect(() => {
     if (!isCheckingAuth) void load(page, q);
@@ -116,6 +157,41 @@ export default function MinimaxAccountsPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => void runJob("全部探活", minimaxProbeAll)} disabled={busy !== ""}>
+          {busy === "全部探活" ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          全部探活
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => void runJob("刷新全部额度", minimaxQuotaAll)} disabled={busy !== ""}>
+          {busy === "刷新全部额度" ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          刷新全部额度
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => void runJob("清理无效号", () => minimaxCleanup({ statuses: ["invalid"] }))} disabled={busy !== ""}>
+          {busy === "清理无效号" ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          清理无效号
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => void exportAccounts()} disabled={busy !== ""}>
+          {busy === "导出" ? <LoaderCircle className="size-4 animate-spin" /> : <Download className="size-4" />}
+          导出
+        </Button>
+      </div>
+
+      <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
+        <CardContent className="space-y-2 p-5">
+          <div className="text-sm font-semibold text-stone-900">导入账号</div>
+          <Textarea
+            value={importText}
+            onChange={(event) => setImportText(event.target.value)}
+            placeholder="每行一个账号，格式 email----password----clientId----refreshToken----auto/imap/graph"
+            className="min-h-20 font-mono text-xs"
+          />
+          <Button size="sm" variant="outline" onClick={() => void importAccounts()} disabled={busy !== ""}>
+            {busy === "导入" ? <LoaderCircle className="size-4 animate-spin" /> : <Upload className="size-4" />}
+            导入
+          </Button>
+        </CardContent>
+      </Card>
+
       {selected.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
           <span className="text-sm text-emerald-800">已选 {selected.length} 个</span>
@@ -183,6 +259,15 @@ export default function MinimaxAccountsPage() {
                             <Button size="sm" variant="ghost" onClick={() => void runOne(account.id, "probe")}>探活</Button>
                             <Button size="sm" variant="ghost" onClick={() => void runOne(account.id, "quota")}>额度</Button>
                             <Button size="sm" variant="ghost" onClick={() => void runOne(account.id, "signin")}>签到</Button>
+                            <Button size="sm" variant="ghost" onClick={() => void runOne(account.id, "credit")}>积分</Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-rose-500"
+                              onClick={() => void runJob("删除", () => minimaxAccountDelete(account.id))}
+                            >
+                              删除
+                            </Button>
                           </div>
                         </td>
                       </tr>

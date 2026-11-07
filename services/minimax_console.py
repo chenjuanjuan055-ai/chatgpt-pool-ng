@@ -243,6 +243,13 @@ class MinimaxConsole:
     def dashboard(self) -> dict[str, Any]:
         return self._request("/admin/api/dashboard")
 
+    def me(self) -> dict[str, Any]:
+        return self._request("/admin/api/auth/me")
+
+    def change_password(self, old_password: str, new_password: str) -> dict[str, Any]:
+        return self._request("/admin/api/auth/password", method="POST",
+                             payload={"oldPassword": old_password, "newPassword": new_password})
+
     def accounts(self, page: int = 1, page_size: int = 20, q: str = "") -> dict[str, Any]:
         query = f"?page={max(1, page)}&page_size={max(1, min(page_size, 200))}"
         if q:
@@ -252,26 +259,68 @@ class MinimaxConsole:
     def account_groups(self) -> dict[str, Any]:
         return self._request("/admin/api/accounts/groups")
 
+    def create_account(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("/admin/api/accounts", method="POST", payload=payload)
+
+    def update_account(self, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request(f"/admin/api/accounts/{account_id}", method="PATCH", payload=payload)
+
+    def delete_account(self, account_id: str) -> dict[str, Any]:
+        return self._request(f"/admin/api/accounts/{account_id}", method="DELETE")
+
+    def export_accounts(self, fmt: str = "json", limit: int = 500) -> dict[str, Any]:
+        return self._request(f"/admin/api/accounts/export?format={urllib.parse.quote(fmt)}&limit={max(1, limit)}")
+
+    def import_accounts(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("/admin/api/accounts/import", method="POST", payload=payload, timeout=300)
+
     def account_ops(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("/admin/api/accounts/batch", method="POST", payload={"action": action, **payload})
 
     def account_action(self, account_id: str, action: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         return self._request(f"/admin/api/accounts/{account_id}/{action}", method="POST", payload=payload or {})
 
+    def probe_all(self) -> dict[str, Any]:
+        return self._request("/admin/api/accounts/probe-all", method="POST", payload={}, timeout=600)
+
+    def quota_all(self) -> dict[str, Any]:
+        return self._request("/admin/api/accounts/quota-all", method="POST", payload={}, timeout=600)
+
+    def cleanup_accounts(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._request("/admin/api/accounts/cleanup", method="POST", payload=payload or {}, timeout=600)
+
     def client_keys(self) -> dict[str, Any]:
         return self._request("/admin/api/client-keys")
+
+    def create_client_key(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("/admin/api/client-keys", method="POST", payload=payload)
+
+    def update_client_key(self, key_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request(f"/admin/api/client-keys/{key_id}", method="PATCH", payload=payload)
+
+    def delete_client_key(self, key_id: str) -> dict[str, Any]:
+        return self._request(f"/admin/api/client-keys/{key_id}", method="DELETE")
 
     def models(self) -> dict[str, Any]:
         return self._request("/admin/api/models")
 
+    def update_model(self, model_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request(f"/admin/api/models/{model_id}", method="PATCH", payload=payload)
+
     def audits(self, page: int = 1, page_size: int = 20) -> dict[str, Any]:
         return self._request(f"/admin/api/audits?page={max(1, page)}&page_size={max(1, min(page_size, 200))}")
+
+    def audit_detail(self, audit_id: str) -> dict[str, Any]:
+        return self._request(f"/admin/api/audits/{audit_id}")
+
+    def clear_audits(self) -> dict[str, Any]:
+        return self._request("/admin/api/audits", method="DELETE")
 
     def signin_overview(self) -> dict[str, Any]:
         return self._request("/admin/api/signin")
 
     def signin_run(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        return self._request("/admin/api/signin/run", method="POST", payload=payload or {})
+        return self._request("/admin/api/signin/run", method="POST", payload=payload or {}, timeout=600)
 
     def gallery(self) -> dict[str, Any]:
         return self._request("/admin/api/gallery")
@@ -279,11 +328,17 @@ class MinimaxConsole:
     def remote_settings(self) -> dict[str, Any]:
         return self._request("/admin/api/settings")
 
+    def save_remote_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("/admin/api/settings", method="PUT", payload=payload)
+
     def browser_login_start(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("/admin/api/browser-login", method="POST", payload=payload)
 
     def browser_login_poll(self, job_id: str) -> dict[str, Any]:
         return self._request(f"/admin/api/browser-login/{job_id}")
+
+    def browser_login_cancel(self, job_id: str) -> dict[str, Any]:
+        return self._request(f"/admin/api/browser-login/{job_id}", method="DELETE")
 
     def status(self) -> dict[str, Any]:
         """面板顶部用的一行状态。"""

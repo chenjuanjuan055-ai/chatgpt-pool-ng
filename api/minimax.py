@@ -69,6 +69,71 @@ def create_router() -> APIRouter:
         except Exception as exc:
             raise _guard(exc) from exc
 
+    @router.post("/api/minimax/accounts")
+    async def create_account(body: dict, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.create_account, body)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.patch("/api/minimax/accounts/{account_id}")
+    async def update_account(account_id: str, body: dict, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.update_account, account_id, body)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.delete("/api/minimax/accounts/{account_id}")
+    async def delete_account(account_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.delete_account, account_id)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.get("/api/minimax/accounts/export")
+    async def export_accounts(format: str = "json", limit: int = 500,
+                              authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.export_accounts, format, limit)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.post("/api/minimax/accounts/import")
+    async def import_accounts(body: dict, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.import_accounts, body)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.post("/api/minimax/accounts/probe-all")
+    async def probe_all(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.probe_all)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.post("/api/minimax/accounts/quota-all")
+    async def quota_all(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.quota_all)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.post("/api/minimax/accounts/cleanup")
+    async def cleanup_accounts(body: dict, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.cleanup_accounts, body)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
     @router.post("/api/minimax/accounts/batch")
     async def accounts_batch(body: dict, authorization: str | None = Header(default=None)):
         require_admin(authorization)
@@ -101,11 +166,43 @@ def create_router() -> APIRouter:
         except Exception as exc:
             raise _guard(exc) from exc
 
+    @router.post("/api/minimax/keys")
+    async def create_key(body: dict, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.create_client_key, body)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.patch("/api/minimax/keys/{key_id}")
+    async def update_key(key_id: str, body: dict, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.update_client_key, key_id, body)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.delete("/api/minimax/keys/{key_id}")
+    async def delete_key(key_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.delete_client_key, key_id)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
     @router.get("/api/minimax/models")
     async def models(authorization: str | None = Header(default=None)):
         require_admin(authorization)
         try:
             return await run_in_threadpool(minimax_console.models)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.patch("/api/minimax/models/{model_id}")
+    async def update_model(model_id: str, body: dict, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.update_model, model_id, body)
         except Exception as exc:
             raise _guard(exc) from exc
 
@@ -115,6 +212,50 @@ def create_router() -> APIRouter:
         require_admin(authorization)
         try:
             return await run_in_threadpool(minimax_console.audits, page, page_size)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.get("/api/minimax/audits/{audit_id}")
+    async def audit_detail(audit_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.audit_detail, audit_id)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.delete("/api/minimax/audits")
+    async def clear_audits(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.clear_audits)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.get("/api/minimax/upstream-settings")
+    async def upstream_settings(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.remote_settings)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.put("/api/minimax/upstream-settings")
+    async def save_upstream_settings(body: dict, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.save_remote_settings, body)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.post("/api/minimax/password")
+    async def change_password(body: dict, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        old_password = str(body.get("oldPassword") or body.get("old_password") or "")
+        new_password = str(body.get("newPassword") or body.get("new_password") or "")
+        if not old_password or not new_password:
+            raise HTTPException(status_code=400, detail={"error": "原密码与新密码必填"})
+        try:
+            return await run_in_threadpool(minimax_console.change_password, old_password, new_password)
         except Exception as exc:
             raise _guard(exc) from exc
 
@@ -155,6 +296,14 @@ def create_router() -> APIRouter:
         require_admin(authorization)
         try:
             return await run_in_threadpool(minimax_console.browser_login_poll, job_id)
+        except Exception as exc:
+            raise _guard(exc) from exc
+
+    @router.delete("/api/minimax/browser-login/{job_id}")
+    async def browser_login_cancel(job_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(minimax_console.browser_login_cancel, job_id)
         except Exception as exc:
             raise _guard(exc) from exc
 

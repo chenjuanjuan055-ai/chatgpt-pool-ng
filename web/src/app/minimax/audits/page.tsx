@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, LoaderCircle, RefreshCw } from "lucide-react";
+import { FileText, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { fetchMinimaxAudits } from "@/lib/api";
+import { fetchMinimaxAudits, minimaxAuditsClear } from "@/lib/api";
 import { useAuthGuard } from "@/lib/use-auth-guard";
 
 export default function MinimaxAuditsPage() {
@@ -42,6 +42,23 @@ export default function MinimaxAuditsPage() {
         <Button variant="outline" onClick={() => void load(page)} disabled={loading}>
           {loading ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
           刷新
+        </Button>
+        <Button
+          variant="outline"
+          className="text-rose-500"
+          onClick={() => {
+            void (async () => {
+              try {
+                await minimaxAuditsClear();
+                await load(page);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "清空失败");
+              }
+            })();
+          }}
+        >
+          <Trash2 className="size-4" />
+          清空审计
         </Button>
       </div>
 

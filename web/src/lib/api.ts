@@ -1625,3 +1625,98 @@ export async function minimaxTunnel(action: "start" | "stop") {
   });
 }
 
+export async function minimaxAccountUpdate(accountId: string, payload: Record<string, unknown>) {
+  return httpRequest<Record<string, any>>(`/api/minimax/accounts/${accountId}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function minimaxAccountDelete(accountId: string) {
+  return httpRequest<Record<string, any>>(`/api/minimax/accounts/${accountId}`, { method: "DELETE" });
+}
+
+export async function minimaxAccountCreate(payload: Record<string, unknown>) {
+  return httpRequest<Record<string, any>>("/api/minimax/accounts", { method: "POST", body: payload });
+}
+
+export async function minimaxAccountsExport(format = "json", limit = 500) {
+  return httpRequest<Record<string, any>>(`/api/minimax/accounts/export?format=${format}&limit=${limit}`, {
+    timeout: 180000,
+  });
+}
+
+export async function minimaxAccountsImport(payload: Record<string, unknown>) {
+  return httpRequest<Record<string, any>>("/api/minimax/accounts/import", {
+    method: "POST",
+    body: payload,
+    timeout: 300000,
+  });
+}
+
+export async function minimaxProbeAll() {
+  return httpRequest<Record<string, any>>("/api/minimax/accounts/probe-all", {
+    method: "POST",
+    body: {},
+    timeout: 600000,
+  });
+}
+
+export async function minimaxQuotaAll() {
+  return httpRequest<Record<string, any>>("/api/minimax/accounts/quota-all", {
+    method: "POST",
+    body: {},
+    timeout: 600000,
+  });
+}
+
+export async function minimaxCleanup(payload: Record<string, unknown> = {}) {
+  return httpRequest<Record<string, any>>("/api/minimax/accounts/cleanup", {
+    method: "POST",
+    body: payload,
+    timeout: 600000,
+  });
+}
+
+export async function minimaxKeyCreate(payload: Record<string, unknown>) {
+  return httpRequest<Record<string, any>>("/api/minimax/keys", { method: "POST", body: payload });
+}
+
+export async function minimaxKeyUpdate(keyId: string, payload: Record<string, unknown>) {
+  return httpRequest<Record<string, any>>(`/api/minimax/keys/${keyId}`, { method: "PATCH", body: payload });
+}
+
+export async function minimaxKeyDelete(keyId: string) {
+  return httpRequest<Record<string, any>>(`/api/minimax/keys/${keyId}`, { method: "DELETE" });
+}
+
+export async function minimaxModelUpdate(modelId: string, payload: Record<string, unknown>) {
+  return httpRequest<Record<string, any>>(`/api/minimax/models/${modelId}`, { method: "PATCH", body: payload });
+}
+
+export async function minimaxAuditDetail(auditId: string) {
+  return httpRequest<Record<string, any>>(`/api/minimax/audits/${auditId}`);
+}
+
+export async function minimaxAuditsClear() {
+  return httpRequest<Record<string, any>>("/api/minimax/audits", { method: "DELETE" });
+}
+
+export async function fetchMinimaxUpstreamSettings() {
+  return httpRequest<Record<string, any>>("/api/minimax/upstream-settings");
+}
+
+export async function saveMinimaxUpstreamSettings(payload: Record<string, unknown>) {
+  return httpRequest<Record<string, any>>("/api/minimax/upstream-settings", {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export async function minimaxChangePassword(oldPassword: string, newPassword: string) {
+  return httpRequest<Record<string, any>>("/api/minimax/password", {
+    method: "POST",
+    body: { oldPassword, newPassword },
+  });
+}
+

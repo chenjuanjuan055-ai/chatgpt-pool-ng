@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { fetchMinimaxSettings, minimaxTunnel, saveMinimaxSettings, type MinimaxSettings } from "@/lib/api";
+import { fetchMinimaxSettings, fetchMinimaxUpstreamSettings, minimaxChangePassword, minimaxTunnel, saveMinimaxSettings, saveMinimaxUpstreamSettings, type MinimaxSettings } from "@/lib/api";
 import { useAuthGuard } from "@/lib/use-auth-guard";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function MinimaxSettingsPage() {
   const { isCheckingAuth } = useAuthGuard(["admin"]);
@@ -16,6 +17,9 @@ export default function MinimaxSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [upstreamJson, setUpstreamJson] = useState("");
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
 
   const load = async () => {
     try {
@@ -24,6 +28,12 @@ export default function MinimaxSettingsPage() {
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "读取失败");
+    }
+    try {
+      const remote = await fetchMinimaxUpstreamSettings();
+      setUpstreamJson(JSON.stringify(remote, null, 2));
+    } catch {
+      setUpstreamJson("");
     }
   };
 
@@ -171,6 +181,74 @@ export default function MinimaxSettingsPage() {
             <span className="text-xs text-stone-400">
               当前：{settings.tunnel_running ? "隧道在线" : "隧道未建立"}
             </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
+        <CardContent className="space-y-2 p-5">
+          <div className="text-sm font-semibold text-stone-900">上游设置（minimax2api 侧）</div>
+          <p className="text-xs text-stone-400">
+            直接编辑 minimax2api 的 settings（server / upstream / routing / audit / media / signin / video）。
+          </p>
+          <Textarea
+            value={upstreamJson}
+            onChange={(event) => setUpstreamJson(event.target.value)}
+            className="min-h-40 font-mono text-xs"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void (async () => {
+                try {
+                  const parsed = JSON.parse(upstreamJson);
+                  await saveMinimaxUpstreamSettings(parsed);
+                  setMessage("上游设置已保存");
+                  setError("");
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "保存失败（JSON 需合法）");
+                }
+              })();
+            }}
+          >
+            <Save className="size-4" />
+            保存上游设置
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
+        <CardContent className="space-y-2 p-5">
+          <div className="text-sm font-semibold text-stone-900">修改管理员密码</div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="mm-old">原密码</Label>
+              <Input id="mm-old" type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="h-9 w-48" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mm-new">新密码</Label>
+              <Input id="mm-new" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-9 w-48" />
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await minimaxChangePassword(oldPassword, newPassword);
+                    setOldPassword("");
+                    setNewPassword("");
+                    setMessage("密码已修改");
+                    setError("");
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "改密失败");
+                  }
+                })();
+              }}
+            >
+              修改密码
+            </Button>
           </div>
         </CardContent>
       </Card>
