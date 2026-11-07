@@ -250,11 +250,24 @@ class MinimaxConsole:
         return self._request("/admin/api/auth/password", method="POST",
                              payload={"oldPassword": old_password, "newPassword": new_password})
 
-    def accounts(self, page: int = 1, page_size: int = 20, q: str = "") -> dict[str, Any]:
-        query = f"?page={max(1, page)}&page_size={max(1, min(page_size, 200))}"
+    def accounts(self, page: int = 1, page_size: int = 20, q: str = "", status: str = "",
+                 kind: str = "", group: str = "", sort_by: str = "", sort_order: str = "") -> dict[str, Any]:
+        """账号列表。
+
+        minimax2api 的参数名是驼峰的 pageSize / search（不是 page_size / q），
+        早期用错导致搜索和分页一直被上游按默认值处理。
+        """
+        query = {
+            "page": str(max(1, page)),
+            "pageSize": str(max(1, min(page_size, 500))),
+        }
         if q:
-            query += f"&q={urllib.parse.quote(q)}"
-        return self._request(f"/admin/api/accounts{query}")
+            query["search"] = q
+        for key, value in (("status", status), ("kind", kind), ("group", group),
+                           ("sortBy", sort_by), ("sortOrder", sort_order)):
+            if value:
+                query[key] = value
+        return self._request(f"/admin/api/accounts?{urllib.parse.urlencode(query)}")
 
     def account_groups(self) -> dict[str, Any]:
         return self._request("/admin/api/accounts/groups")

@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
 from api.support import require_admin
@@ -53,11 +53,25 @@ def create_router() -> APIRouter:
             raise _guard(exc) from exc
 
     @router.get("/api/minimax/accounts")
-    async def accounts(page: int = 1, page_size: int = 20, q: str = "",
-                       authorization: str | None = Header(default=None)):
+    async def accounts(
+        page: int = 1,
+        # 对齐 minimax2api 的驼峰参数名：pageSize / search / sortBy / sortOrder。
+        # 不用 alias 的话 FastAPI 会把前端传来的 pageSize 当未知参数丢掉，
+        # 静默退回默认值——搜索和分页看起来"能用"但其实没生效。
+        page_size: int = Query(default=20, alias="pageSize", ge=1, le=500),
+        q: str = Query(default="", alias="search"),
+        status: str = "",
+        kind: str = "",
+        group: str = "",
+        sort_by: str = Query(default="", alias="sortBy"),
+        sort_order: str = Query(default="", alias="sortOrder"),
+        authorization: str | None = Header(default=None),
+    ):
         require_admin(authorization)
         try:
-            return await run_in_threadpool(minimax_console.accounts, page, page_size, q)
+            return await run_in_threadpool(
+                minimax_console.accounts, page, page_size, q, status, kind, group, sort_by, sort_order,
+            )
         except Exception as exc:
             raise _guard(exc) from exc
 

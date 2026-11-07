@@ -1,17 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LoaderCircle, Download, RefreshCw, Search, Upload, Users } from "lucide-react";
+import { LoaderCircle, Download, Plus, RefreshCw, Search, Upload, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  fetchMinimaxAccountGroups,
   fetchMinimaxAccounts,
   minimaxAccountAction,
   minimaxAccountBatch,
+  minimaxAccountCreate,
   minimaxAccountDelete,
+  minimaxAccountUpdate,
   minimaxAccountsExport,
   minimaxAccountsImport,
   minimaxCleanup,
@@ -42,14 +60,29 @@ export default function MinimaxAccountsPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [importText, setImportText] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [kindFilter, setKindFilter] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
+  const [sortBy, setSortBy] = useState("");
+  const [sortOrder, setSortOrder] = useState("");
+  const [groups, setGroups] = useState<string[]>([]);
+  const [editing, setEditing] = useState<MinimaxAccount | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ name: "", kind: "token", region: "global", group: "", remark: "", priority: "50", maxConcurrent: "2" });
 
   const load = async (target = page, keyword = q) => {
     setLoading(true);
     try {
-      const data = await fetchMinimaxAccounts(target, 20, keyword);
+      const data = await fetchMinimaxAccounts(target, 20, keyword, {
+        status: statusFilter,
+        kind: kindFilter,
+        group: groupFilter,
+        sortBy,
+        sortOrder,
+      });
       setItems(data.items || []);
       setTotal(Number(data.total || 0));
-      setSummary((data as any).summary || {});
+      setSummary(data.summary || {});
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "读取失败");
@@ -57,6 +90,18 @@ export default function MinimaxAccountsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isCheckingAuth) return;
+    void (async () => {
+      try {
+        const data = await fetchMinimaxAccountGroups();
+        setGroups(data.groups || []);
+      } catch {
+        setGroups([]);
+      }
+    })();
+  }, [isCheckingAuth]);
 
   const runJob = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(label);
@@ -118,6 +163,34 @@ export default function MinimaxAccountsPage() {
     }
   };
 
+  const saveAccount = async () => {
+    setBusy("保存账号");
+    try {
+      const payload = {
+        name: form.name.trim(),
+        kind: form.kind,
+        region: form.region,
+        group: form.group.trim(),
+        remark: form.remark.trim(),
+        priority: Number(form.priority) || 0,
+        maxConcurrent: Number(form.maxConcurrent) || 1,
+      };
+      if (editing) {
+        await minimaxAccountUpdate(String(editing.id), payload);
+      } else {
+        await minimaxAccountCreate(payload);
+      }
+      setEditing(null);
+      setCreating(false);
+      await load(page, q);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存失败");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const pages = Math.max(1, Math.ceil(total / 20));
 
   return (
@@ -155,6 +228,66 @@ export default function MinimaxAccountsPage() {
             刷新
           </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1.5">
+          <div className="text-xs text-stone-400">状态</div>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+            <SelectTrigger className="h-9 w-32"><SelectValue placeholder="全部" /></SelectTrigger>
+            <SelectContent>
+              {["", "active", "ready", "disabled", "cooldown", "invalid", "error"].map((s) => (
+                <SelectItem key={s || "all"} value={s}>{s || "全部"}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <div className="text-xs text-stone-400">类型</div>
+          <Select value={kindFilter} onValueChange={(v) => { setKindFilter(v); setPage(1); }}>
+            <SelectTrigger className="h-9 w-32"><SelectValue placeholder="全部" /></SelectTrigger>
+            <SelectContent>
+              {["", "token", "cookie"].map((s) => (
+                <SelectItem key={s || "all"} value={s}>{s || "全部"}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <div className="text-xs text-stone-400">分组</div>
+          <Select value={groupFilter} onValueChange={(v) => { setGroupFilter(v); setPage(1); }}>
+            <SelectTrigger className="h-9 w-32"><SelectValue placeholder="全部" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">全部</SelectItem>
+              {groups.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <div className="text-xs text-stone-400">排序</div>
+          <Select
+            value={sortBy ? `${sortBy}:${sortOrder || "desc"}` : ""}
+            onValueChange={(v) => {
+              const [field, order] = v.split(":");
+              setSortBy(field); setSortOrder(order); setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-9 w-40"><SelectValue placeholder="默认" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">默认</SelectItem>
+              <SelectItem value="name:asc">名称 ↑</SelectItem>
+              <SelectItem value="status:asc">状态 ↑</SelectItem>
+              <SelectItem value="priority:desc">优先级 ↓</SelectItem>
+              <SelectItem value="lastUsedAt:desc">最近使用 ↓</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => { setPage(1); void load(1, q); }}>
+          应用筛选
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
+          <Plus className="size-4" />新建账号
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -263,6 +396,24 @@ export default function MinimaxAccountsPage() {
                             <Button
                               size="sm"
                               variant="ghost"
+                              onClick={() => {
+                                setEditing(account);
+                                setForm({
+                                  name: String(account.name || ""),
+                                  kind: String(account.kind || "token"),
+                                  region: String(account.region || "global"),
+                                  group: String(account.group || ""),
+                                  remark: String(account.remark || ""),
+                                  priority: String(account.priority ?? 50),
+                                  maxConcurrent: String(account.maxConcurrent ?? 2),
+                                });
+                              }}
+                            >
+                              编辑
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
                               className="text-rose-500"
                               onClick={() => void runJob("删除", () => minimaxAccountDelete(account.id))}
                             >
@@ -279,6 +430,69 @@ export default function MinimaxAccountsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={creating || Boolean(editing)} onOpenChange={(open) => { if (!open) { setCreating(false); setEditing(null); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing ? "编辑账号" : "新建账号"}</DialogTitle>
+            <DialogDescription>token / cookie 类型账号的公共字段</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="space-y-1.5">
+              <div className="text-xs text-stone-400">名称</div>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <div className="text-xs text-stone-400">类型</div>
+                <Select value={form.kind} onValueChange={(v) => setForm({ ...form, kind: v })}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="token">token</SelectItem>
+                    <SelectItem value="cookie">cookie</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <div className="text-xs text-stone-400">区域</div>
+                <Select value={form.region} onValueChange={(v) => setForm({ ...form, region: v })}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="global">global</SelectItem>
+                    <SelectItem value="cn">cn</SelectItem>
+                    <SelectItem value="auto">auto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <div className="text-xs text-stone-400">分组</div>
+                <Input value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <div className="text-xs text-stone-400">优先级</div>
+                <Input value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value.replace(/\D/g, "") })} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-xs text-stone-400">并发上限</div>
+              <Input value={form.maxConcurrent} onChange={(e) => setForm({ ...form, maxConcurrent: e.target.value.replace(/\D/g, "") })} />
+            </div>
+            <div className="space-y-1.5">
+              <div className="text-xs text-stone-400">备注</div>
+              <Input value={form.remark} onChange={(e) => setForm({ ...form, remark: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCreating(false); setEditing(null); }}>取消</Button>
+            <Button onClick={() => void saveAccount()} disabled={busy !== ""}>
+              {busy === "保存账号" ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex items-center justify-between text-sm text-stone-500">
         <span className="inline-flex items-center gap-1.5"><Users className="size-4" />第 {page} / {pages} 页</span>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BookOpen, Boxes, FileText, Film, Gauge, Home, Image, KeyRound, Layers, ShieldCheck, Sparkles, UserPlus, Users } from "lucide-react";
+import { Activity, BookOpen, Boxes, FileText, Film, Gauge, Home, Image, KeyRound, Layers, LogIn, ShieldCheck, Sparkles, UserPlus, Users } from "lucide-react";
 
 import { ProductSwitcher } from "@/components/product-switcher";
 import { TopNav } from "@/components/top-nav";
@@ -71,7 +71,9 @@ function MinimaxNav() {
     { href: "/minimax/models", label: "模型", icon: Layers, match: () => pathname.startsWith("/minimax/models") },
     { href: "/minimax/signin", label: "签到", icon: UserPlus, match: () => pathname.startsWith("/minimax/signin") },
     { href: "/minimax/gallery", label: "图库", icon: Image, match: () => pathname.startsWith("/minimax/gallery") },
+    { href: "/minimax/browser-login", label: "浏览器登录", icon: LogIn, match: () => pathname.startsWith("/minimax/browser-login") },
     { href: "/minimax/audits", label: "请求审计", icon: FileText, match: () => pathname.startsWith("/minimax/audits") },
+    { href: "/minimax/docs", label: "API 文档", icon: BookOpen, match: () => pathname.startsWith("/minimax/docs") },
     { href: "/minimax/settings", label: "连接设置", icon: ShieldCheck, match: () => pathname.startsWith("/minimax/settings") },
   ];
   return (

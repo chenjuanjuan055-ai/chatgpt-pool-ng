@@ -1576,10 +1576,23 @@ export async function fetchMinimaxDashboard() {
   return httpRequest<Record<string, any>>("/api/minimax/dashboard");
 }
 
-export async function fetchMinimaxAccounts(page = 1, pageSize = 20, q = "") {
-  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
-  if (q) params.set("q", q);
-  return httpRequest<{ items: MinimaxAccount[]; total?: number }>(`/api/minimax/accounts?${params}`);
+export async function fetchMinimaxAccounts(
+  page = 1,
+  pageSize = 20,
+  q = "",
+  filters: { status?: string; kind?: string; group?: string; sortBy?: string; sortOrder?: string } = {},
+) {
+  // minimax2api 收的是驼峰参数：pageSize / search
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (q) params.set("search", q);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.kind) params.set("kind", filters.kind);
+  if (filters.group) params.set("group", filters.group);
+  if (filters.sortBy) params.set("sortBy", filters.sortBy);
+  if (filters.sortOrder) params.set("sortOrder", filters.sortOrder);
+  return httpRequest<{ items: MinimaxAccount[]; total?: number; pageSize?: number; summary?: Record<string, any> }>(
+    `/api/minimax/accounts?${params}`,
+  );
 }
 
 export async function fetchMinimaxKeys() {
@@ -1718,5 +1731,29 @@ export async function minimaxChangePassword(oldPassword: string, newPassword: st
     method: "POST",
     body: { oldPassword, newPassword },
   });
+}
+
+export async function fetchMinimaxAccountGroups() {
+  return httpRequest<{ groups: string[] }>("/api/minimax/accounts/groups");
+}
+
+export async function minimaxBrowserLoginStart(payload: Record<string, unknown>) {
+  return httpRequest<{ sessionId: string; target?: string; region?: string; proxy?: string }>(
+    "/api/minimax/browser-login",
+    { method: "POST", body: payload },
+  );
+}
+
+export async function minimaxBrowserLoginPoll(sessionId: string) {
+  return httpRequest<{ status: "pending" | "ok" | "timeout" | "error"; account?: any; error?: string }>(
+    `/api/minimax/browser-login/${encodeURIComponent(sessionId)}`,
+  );
+}
+
+export async function minimaxBrowserLoginCancel(sessionId: string) {
+  return httpRequest<{ cancelled: boolean }>(
+    `/api/minimax/browser-login/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" },
+  );
 }
 
