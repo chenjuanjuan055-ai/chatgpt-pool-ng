@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-os.environ.setdefault("CHATGPT2API_AUTH_KEY", "test-auth")
+# 鉴权密钥统一由 test/conftest.py 设置。这里不要再单独设，
+# 否则会污染后续测试模块的 os.environ（pytest 按文件名顺序导入模块）。
 
 from services.account_service import AccountService
 from services.auth_service import AuthService

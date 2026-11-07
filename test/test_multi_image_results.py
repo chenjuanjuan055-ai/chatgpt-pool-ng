@@ -36,6 +36,9 @@ class FakeBackend(OpenAIBackendAPI):
         self.calls = 0
         self.file_urls: dict[str, str] = {}
         self.sediment_urls: dict[str, str] = {}
+        # 真实后端在 __init__ 里会建 curl 会话；这里不联网，补一个占位，
+        # 免得轮询逻辑访问 backend.session 时抛 AttributeError。
+        self.session = None
 
     def _get_conversation(self, conversation_id: str) -> dict:
         self.calls += 1
@@ -47,6 +50,11 @@ class FakeBackend(OpenAIBackendAPI):
 
     def _get_attachment_download_url(self, conversation_id: str, attachment_id: str) -> str:
         return self.sediment_urls.get(attachment_id, "")
+
+    def _query_backend_tasks(self, conversation_id: str = "", task_id: str = "",
+                             timeout_secs: float = 30.0) -> list[dict]:
+        """真实后端会去查上游任务列表；这里不联网，直接返回空。"""
+        return []
 
 
 class MultiImageResultTests(unittest.TestCase):
@@ -119,7 +127,17 @@ class MultiImageResultTests(unittest.TestCase):
         ])
 
         with (
-            mock.patch.dict(config.data, {"image_poll_initial_wait_secs": 0, "image_poll_interval_secs": 0.5}),
+            mock.patch.dict(
+                config.data,
+                {
+                    "image_poll_initial_wait_secs": 0,
+                    "image_poll_interval_secs": 0.5,
+                    # 必须显式打开：默认值在代码里是 True，但本机 config.json 可能
+                    # 关掉它，测试不能依赖本机配置。
+                    "image_check_before_hit_enabled": True,
+                    "image_settle_enabled": True,
+                },
+            ),
             mock.patch("services.openai_backend_api.time.sleep", lambda _seconds: None),
         ):
             file_ids, sediment_ids = backend._poll_image_results("conv-1", timeout_secs=10)

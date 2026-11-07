@@ -27,6 +27,7 @@ from services.log_service import log_service
 from services.account_health import analyze_accounts
 from services.account_service import account_service
 from services.egress_service import egress_manager
+from services.endpoint_probe import endpoint_probe
 from services.metrics_service import metrics_service
 from services.model_catalog_service import get_model_catalog
 from services.prompts_service import create_prompt, delete_prompt, list_prompts
@@ -348,6 +349,7 @@ def create_router(app_version: str) -> APIRouter:
             "status": "ok",
             "accounts": {"total": summary["total"], "healthy": summary["healthy"], "dead": summary["dead"]},
             "egress": {"enabled": egress_manager.enabled, "endpoints": egress_manager.snapshot()},
+            "dependencies": endpoint_probe.snapshot(),
             "metrics": {
                 "total": snapshot["total"],
                 "failed": snapshot["failed"],
@@ -494,7 +496,7 @@ def create_router(app_version: str) -> APIRouter:
         return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="zh">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>号池健康监控 - chatgpt2api</title>
+<title>号池健康监控 - chatgpt-pool-ng</title>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:system-ui,-apple-system,sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}}

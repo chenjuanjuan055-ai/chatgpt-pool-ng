@@ -7,6 +7,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from services.endpoint_probe import endpoint_probe
+
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "register_console.json"
 POOL_FILE = Path(__file__).resolve().parents[1] / "data" / "register_pool.txt"
 DEFAULT_BASE = "http://127.0.0.1:8092"
@@ -97,6 +99,10 @@ class RegisterConsole:
     def _request(self, path: str, method: str = "GET", payload: dict[str, Any] | None = None,
                  timeout: int = 30) -> Any:
         base = self.settings()["base_url"]
+        # 已知不可达时立刻失败：Windows 对本机未监听端口要等约 2 秒才回 RST，
+        # 没有这层预检，grok-register 没启动时每个接口都会空等那 2 秒。
+        if endpoint_probe.is_reachable("grok-register", base) is False:
+            raise RegisterConsoleError(endpoint_probe.describe("grok-register", base))
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         headers = {"accept": "application/json", "origin": base, "referer": base + "/"}
         if data is not None:

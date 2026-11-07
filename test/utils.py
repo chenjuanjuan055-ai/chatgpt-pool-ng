@@ -10,6 +10,10 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT_DIR / "data" / "output"
 BASE_URL = "http://127.0.0.1:8000"
 
+# 单次请求的上限。必须设：urlopen 不传 timeout 时用的是 socket 的全局默认值，
+# 一旦上游 SSE 不结束，测试就会永久挂住，整套用例都跑不完。
+REQUEST_TIMEOUT = 120
+
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -18,14 +22,14 @@ def load_auth_key() -> str:
     return json.loads((ROOT_DIR / "config.json").read_text(encoding="utf-8"))["auth-key"]
 
 
-def post_json(path: str, payload: dict) -> dict:
+def post_json(path: str, payload: dict, timeout: int = REQUEST_TIMEOUT) -> dict:
     request = urllib.request.Request(
         BASE_URL + path,
         data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {load_auth_key()}"},
         method="POST",
     )
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode())
 
 

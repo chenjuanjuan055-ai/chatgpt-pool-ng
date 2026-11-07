@@ -1,6 +1,6 @@
 {
   "name": "chatgpt-pool-ng-web",
-  "version": "1.9.0",
+  "version": "1.9.1-ng",
   "private": true,
   "type": "module",
   "scripts": {

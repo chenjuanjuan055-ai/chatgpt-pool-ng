@@ -13,6 +13,7 @@ from curl_cffi import requests
 from fastapi import HTTPException
 from services.proxy_service import proxy_settings
 from utils.log import logger
+from utils.url_guard import BlockedImageUrlError, check_final_url, check_image_url
 
 WEB_IMAGE_MODELS = (
     "gpt-image-2",
@@ -365,11 +366,18 @@ def _decode_message_image_url(value: object) -> tuple[bytes, str] | None:
     parsed = urlparse(source)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
+    try:
+        # 延迟导入：services.config 会牵出 storage 层，模块顶层互相导入容易成环。
+        from services.config import config as _config
+
+        check_image_url(source, allow_private=_config.allow_private_image_urls)
+    except BlockedImageUrlError as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
 
     try:
         response = requests.get(
             source,
-            headers={"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt2api vision fetcher"},
+            headers={"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt-pool-ng vision fetcher"},
             timeout=REMOTE_IMAGE_TIMEOUT_SECONDS,
             allow_redirects=True,
             **proxy_settings.build_session_kwargs(),
@@ -378,6 +386,12 @@ def _decode_message_image_url(value: object) -> tuple[bytes, str] | None:
         raise HTTPException(status_code=400, detail={"error": f"image_url fetch failed: {exc}"}) from exc
     if not 200 <= response.status_code < 300:
         raise HTTPException(status_code=400, detail={"error": f"image_url fetch failed: HTTP {response.status_code}"})
+    try:
+        from services.config import config as _config
+
+        check_final_url(getattr(response, "url", ""), allow_private=_config.allow_private_image_urls)
+    except BlockedImageUrlError as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
     content_length = str(response.headers.get("content-length") or "").strip()
     if content_length.isdigit() and int(content_length) > MAX_JSON_IMAGE_BYTES:
         raise HTTPException(status_code=400, detail={"error": "image_url exceeds 10MB limit"})

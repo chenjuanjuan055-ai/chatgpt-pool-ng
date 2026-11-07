@@ -203,6 +203,9 @@ DEFAULT_PROXY_RUNTIME = {
         "timeout_sec": int(DEFAULT_EGRESS_POOL["timeout_sec"]),
         "failure_threshold": int(DEFAULT_EGRESS_POOL["failure_threshold"]),
         "cooldown_sec": int(DEFAULT_EGRESS_POOL["cooldown_sec"]),
+        # 必须和 _normalize_egress_pool_settings 的产出字段保持一致，
+        # 否则默认值模板会漏掉出口池的分组选择。
+        "active_group": str(DEFAULT_EGRESS_POOL.get("active_group", "")),
         "endpoints": [],
     },
     "clearance": {
@@ -750,6 +753,18 @@ class ConfigStore:
         except FileNotFoundError:
             return "0.0.0"
         return value or "0.0.0"
+
+    @property
+    def allow_private_image_urls(self) -> bool:
+        """是否允许 image_url 指向内网/回环地址。
+
+        默认关闭：开着等于给调用方开了一条 SSRF 通道（可探测本机与内网、
+        读取云元数据）。确实要在内网部署并拉内网图片时再打开。
+        """
+        raw = os.getenv("CHATGPT2API_ALLOW_PRIVATE_IMAGE_URLS")
+        if raw is None:
+            raw = self.data.get("allow_private_image_urls", False)
+        return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
     def get_gif_models(self) -> list[str]:
         raw = self.data.get("gif_models")

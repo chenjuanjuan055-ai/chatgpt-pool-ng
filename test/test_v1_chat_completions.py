@@ -6,10 +6,14 @@ import unittest
 
 import requests
 
+import pytest
 from utils.helper import save_images_from_text
 
 AUTH_KEY = "chatgpt2api"
 BASE_URL = "http://localhost:8000"
+
+
+pytestmark = pytest.mark.live
 
 
 class ChatCompletionsTests(unittest.TestCase):

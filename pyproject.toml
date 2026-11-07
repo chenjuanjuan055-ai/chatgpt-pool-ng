@@ -1,6 +1,6 @@
 [project]
 name = "chatgpt-pool-ng"
-version = "1.9.0"
+version = "1.9.1+ng"
 description = "ChatGPT account pool with egress governance, account health and observability"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -20,7 +20,17 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "pytest>=8.0",
+    "pytest-timeout>=2.3",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: 需要真实上游的集成测试，会消耗真实账号额度（需 CHATGPT2API_LIVE=1）",
+]
+# 兜底超时：上游 SSE 不结束时客户端会一直等，没有上限整套测试就挂死了。
+timeout = 300
+timeout_method = "thread"
 
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple"

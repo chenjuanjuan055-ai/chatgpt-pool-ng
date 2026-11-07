@@ -6,11 +6,15 @@ from unittest import mock
 
 import requests
 
+import pytest
 from services.protocol import openai_v1_models
 
 
 AUTH_KEY = "chatgpt2api"
 BASE_URL = "http://localhost:8000"
+
+
+pytestmark = pytest.mark.live
 
 
 class ModelListTests(unittest.TestCase):

@@ -17,6 +17,9 @@ DEFAULT_USER_AGENT = (
     "Chrome/145.0.0.0 Safari/537.36"
 )
 
+# 注意：这里的默认结构必须与 services/config.py 的 DEFAULT_PROXY_RUNTIME 保持一致。
+# 历史上这份副本漏掉了整个 egress_pool 块，容器初始化时会把出口池配置整个丢掉。
+# test/test_proxy_runtime_config.py 里有断言守着两处不漂移。
 DEFAULT_PROXY_RUNTIME: dict[str, Any] = {
     "enabled": False,
     "egress_mode": "direct",
@@ -24,6 +27,18 @@ DEFAULT_PROXY_RUNTIME: dict[str, Any] = {
     "resource_proxy_url": "",
     "skip_ssl_verify": False,
     "reset_session_status_codes": [403],
+    "egress_pool": {
+        "enabled": False,
+        "auto_failover": True,
+        "max_attempts": 3,
+        "probe_url": "https://www.gstatic.com/generate_204",
+        "probe_interval": 60,
+        "timeout_sec": 5,
+        "failure_threshold": 2,
+        "cooldown_sec": 300,
+        "active_group": "",
+        "endpoints": [],
+    },
     "clearance": {
         "enabled": False,
         "mode": "none",

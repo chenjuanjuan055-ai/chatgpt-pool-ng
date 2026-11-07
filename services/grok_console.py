@@ -14,6 +14,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from services.endpoint_probe import endpoint_probe
+
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "grok_console.json"
 
 _EVENTS: list[dict[str, Any]] = []
@@ -81,6 +83,10 @@ class GrokConsole:
         base = (base or settings.get("base_url") or "").rstrip("/")
         if not base:
             raise GrokConsoleError("未配置 grok2api 地址")
+        # 已知不可达时立刻失败：Windows 对本机未监听端口要等约 2 秒才回 RST，
+        # 没有这层预检，外部服务没启动时每个接口都会空等那 2 秒。
+        if endpoint_probe.is_reachable("grok2api", base) is False:
+            raise GrokConsoleError(endpoint_probe.describe("grok2api", base))
         headers = {"content-type": "application/json"}
         if token:
             headers["authorization"] = f"Bearer {token}"

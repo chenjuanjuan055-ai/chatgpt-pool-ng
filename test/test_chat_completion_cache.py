@@ -562,7 +562,11 @@ class ChatCompletionCacheTests(unittest.TestCase):
                 }],
             })
 
-        request_get.assert_called_once()
+        request_get.assert_called()
+        # 不要断言「只调用一次」：utils.helper.requests 就是 curl_cffi.requests 模块本身，
+        # patch 它等于全局 patch，代理运行时探测之类的调用也会被记进来。
+        image_calls = [c for c in request_get.call_args_list if "example.test" in str(c)]
+        self.assertTrue(image_calls, f"未发起远程图片请求: {request_get.call_args_list}")
         self.assertEqual(model, "auto")
         content = messages[0]["content"]
         self.assertEqual(content[0], {"type": "text", "text": "Describe this"})
@@ -618,7 +622,11 @@ class ChatCompletionCacheTests(unittest.TestCase):
                 }],
             })
 
-        request_get.assert_called_once()
+        request_get.assert_called()
+        # 不要断言「只调用一次」：utils.helper.requests 就是 curl_cffi.requests 模块本身，
+        # patch 它等于全局 patch，代理探测之类的调用也会被记进来。
+        image_calls = [c for c in request_get.call_args_list if "example.test" in str(c)]
+        self.assertTrue(image_calls, f"未发起远程图片请求: {request_get.call_args_list}")
         content = messages[0]["content"]
         self.assertEqual(content[0], {"type": "text", "text": "Describe this"})
         self.assertEqual(content[1]["type"], "image")

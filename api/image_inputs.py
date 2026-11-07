@@ -14,7 +14,9 @@ from fastapi import HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from services.config import config
 from services.proxy_service import proxy_settings
+from utils.url_guard import BlockedImageUrlError, check_final_url, check_image_url
 
 ImageInput = tuple[bytes, str, str]
 ImageSource = str | UploadFile | ImageInput
@@ -268,9 +270,13 @@ def _download_image_url(url: str) -> ImageInput:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(status_code=400, detail={"error": "image_url must be an http or https URL"})
     try:
+        check_image_url(source, allow_private=config.allow_private_image_urls)
+    except BlockedImageUrlError as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+    try:
         response = requests.get(
             source,
-            headers={"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt2api image fetcher"},
+            headers={"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt-pool-ng image fetcher"},
             timeout=60,
             allow_redirects=True,
             **proxy_settings.build_session_kwargs(),
@@ -279,6 +285,10 @@ def _download_image_url(url: str) -> ImageInput:
         raise HTTPException(status_code=400, detail={"error": f"image_url fetch failed: {exc}"}) from exc
     if not 200 <= response.status_code < 300:
         raise HTTPException(status_code=400, detail={"error": f"image_url fetch failed: HTTP {response.status_code}"})
+    try:
+        check_final_url(getattr(response, "url", ""), allow_private=config.allow_private_image_urls)
+    except BlockedImageUrlError as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
     content_length = _clean(response.headers.get("content-length"))
     if content_length and content_length.isdigit() and int(content_length) > MAX_IMAGE_REFERENCE_BYTES:
         raise HTTPException(status_code=400, detail={"error": "image_url exceeds 50MB limit"})

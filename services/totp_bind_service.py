@@ -411,6 +411,7 @@ class TotpBindService:
         try:
             with sync_playwright() as pw:
                 browser = None
+                browser_key = None
                 try:
                     for access_token in access_tokens:
                         account = account_service.get_account(access_token) or {}
@@ -425,14 +426,21 @@ class TotpBindService:
                         outcome = {"ok": False, "stage": "exception", "detail": "没有可用的出口代理"}
                         for candidate in self._proxy_candidates(proxy_url) or [""]:
                             try:
-                                if browser is not None:
-                                    browser.close()
-                                    browser = None
-                                browser = pw.chromium.launch(
-                                    headless=headless,
-                                    proxy={"server": candidate} if candidate else None,
-                                    args=["--disable-blink-features=AutomationControlled"],
-                                )
+                                # 只在**出口代理变了**时才重启浏览器。同一个代理下的账号复用
+                                # 同一个 browser 实例，login_and_bind 内部每次都会
+                                # browser.new_context()，cookie / localStorage 天然隔离。
+                                # 之前是每个账号都 launch+close 一个 Chrome，
+                                # N 个账号就是 N 次进程启动开销。
+                                if browser is None or browser_key != candidate:
+                                    if browser is not None:
+                                        browser.close()
+                                        browser = None
+                                    browser = pw.chromium.launch(
+                                        headless=headless,
+                                        proxy={"server": candidate} if candidate else None,
+                                        args=["--disable-blink-features=AutomationControlled"],
+                                    )
+                                    browser_key = candidate
                                 outcome = login_and_bind(
                                     browser,
                                     email=email,

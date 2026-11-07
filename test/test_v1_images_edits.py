@@ -8,11 +8,15 @@ from pathlib import Path
 import requests
 
 from test.utils import save_image
+import pytest
 from utils.log import logger
 
 AUTH_KEY = "chatgpt2api"
 BASE_URL = "http://localhost:8000"
 ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets"
+
+
+pytestmark = pytest.mark.live
 
 
 def load_asset_bytes(name: str) -> bytes:
