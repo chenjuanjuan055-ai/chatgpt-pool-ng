@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BookOpen, Boxes, FileText, Film, Gauge, Home, Image, KeyRound, Layers, LogIn, ShieldCheck, Sparkles, UserPlus, Users } from "lucide-react";
+import { Activity, BookOpen, Boxes, FileText, Film, Gauge, Home, Image, KeyRound, Layers, LogIn, Plug, ShieldCheck, Sparkles, UserPlus, Users } from "lucide-react";
 
 import { ProductSwitcher } from "@/components/product-switcher";
 import { TopNav } from "@/components/top-nav";
@@ -23,6 +23,7 @@ function GrokNav() {
     { href: "/grok/playground", label: "创作控制台", icon: Sparkles, match: () => pathname.startsWith("/grok/playground") },
     { href: "/grok/live", label: "实时控制台", icon: Activity, match: () => pathname.startsWith("/grok/live") },
     { href: "/grok/docs", label: "文档", icon: BookOpen, match: () => pathname.startsWith("/grok/docs") },
+    { href: "/grok/settings", label: "连接设置", icon: Plug, match: () => pathname.startsWith("/grok/settings") },
   ];
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-[#121826] text-slate-200 md:flex">
@@ -57,7 +58,7 @@ function GrokNav() {
           返回首页
         </Link>
       </nav>
-      <div className="px-5 pb-5 text-[11px] text-slate-500">v1.9.0-ng</div>
+      <div className="px-5 pb-5 text-[11px] text-slate-500">v1.9.1-ng</div>
     </aside>
   );
 }

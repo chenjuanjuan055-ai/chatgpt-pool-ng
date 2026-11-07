@@ -15,8 +15,25 @@ from pathlib import Path
 from typing import Any
 
 from services.endpoint_probe import endpoint_probe
+from services.ssh_tunnel import SshTunnel, port_open
 
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "grok_console.json"
+
+
+def _as_bool(value: object, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value or "").strip().lower()
+    if not text:
+        return default
+    return text in {"1", "true", "yes", "on"}
+
+
+def _as_int(value: object, default: int = 0) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
 
 _EVENTS: list[dict[str, Any]] = []
 _EVENT_LOCK = threading.Lock()
@@ -32,6 +49,12 @@ _DEFAULT: dict[str, Any] = {
     "username": "",
     "password": "",
     "api_key": "",
+    # SSH 隧道：grok2api 在 VPS 上只监听 127.0.0.1，云安全组也没放行 8002，
+    # 本机要连它只能自己拉一条端口转发。
+    "auto_tunnel": True,
+    "ssh_host": "root@47.80.60.216",
+    "ssh_remote_port": 8002,
+    "ssh_local_port": 8002,
 }
 
 
@@ -44,6 +67,7 @@ class GrokConsole:
         self._lock = threading.Lock()
         self._token = ""
         self._token_at = 0.0
+        self._tunnel: SshTunnel | None = None
 
     # ---------- settings ----------
     def settings(self) -> dict[str, Any]:
@@ -74,7 +98,39 @@ class GrokConsole:
             "username": data.get("username") or "",
             "api_key_masked": f"{key[:8]}***{key[-4:]}" if len(key) > 14 else ("***" if key else ""),
             "configured": bool(data.get("base_url") and data.get("username") and data.get("password")),
+            "auto_tunnel": _as_bool(data.get("auto_tunnel"), True),
+            "ssh_host": data.get("ssh_host") or "",
+            "ssh_remote_port": _as_int(data.get("ssh_remote_port"), 8002),
+            "ssh_local_port": _as_int(data.get("ssh_local_port"), 8002),
+            "tunnel_running": self.tunnel().alive(),
         }
+
+    # ---------- SSH 隧道 ----------
+    def tunnel(self) -> SshTunnel:
+        data = self.settings()
+        with self._lock:
+            if self._tunnel is None:
+                self._tunnel = SshTunnel(
+                    "grok2api",
+                    str(data.get("ssh_host") or ""),
+                    _as_int(data.get("ssh_remote_port"), 8002),
+                    _as_int(data.get("ssh_local_port"), 8002),
+                )
+            return self._tunnel
+
+    def ensure_ready(self) -> None:
+        """确保本地端口能通到 grok2api，通不通就现拉一条隧道。"""
+        data = self.settings()
+        local_port = _as_int(data.get("ssh_local_port"), 8002)
+        if local_port > 0 and port_open(local_port):
+            return
+        if not _as_bool(data.get("auto_tunnel"), True):
+            raise GrokConsoleError(f"grok2api 不可达（本地端口 {local_port} 无响应）")
+        tunnel = self.tunnel()
+        if not tunnel.start():
+            raise GrokConsoleError(
+                f"grok2api 不可达，且 SSH 隧道拉不起来：{tunnel.last_error or '未知原因'}"
+            )
 
     # ---------- http ----------
     def _request(self, path: str, method: str = "GET", payload: dict[str, Any] | None = None,
@@ -83,6 +139,7 @@ class GrokConsole:
         base = (base or settings.get("base_url") or "").rstrip("/")
         if not base:
             raise GrokConsoleError("未配置 grok2api 地址")
+        self.ensure_ready()
         # 已知不可达时立刻失败：Windows 对本机未监听端口要等约 2 秒才回 RST，
         # 没有这层预检，外部服务没启动时每个接口都会空等那 2 秒。
         if endpoint_probe.is_reachable("grok2api", base) is False:

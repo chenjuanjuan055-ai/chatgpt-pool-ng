@@ -1522,6 +1522,29 @@ export async function importGrokMedia(url: string) {
 
 /* ---------------------------------------------------------------- MiniMax */
 
+export type GrokConsoleSettings = {
+  base_url: string;
+  username: string;
+  api_key_masked: string;
+  configured: boolean;
+  auto_tunnel?: boolean;
+  ssh_host?: string;
+  ssh_remote_port?: number;
+  ssh_local_port?: number;
+  tunnel_running?: boolean;
+};
+
+export async function fetchGrokSettings() {
+  return httpRequest<{ settings: GrokConsoleSettings }>("/api/grok/settings");
+}
+
+export async function saveGrokSettings(payload: Record<string, unknown>) {
+  return httpRequest<{ settings: GrokConsoleSettings }>("/api/grok/settings", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export type MinimaxSettings = {
   base_url: string;
   username: string;
