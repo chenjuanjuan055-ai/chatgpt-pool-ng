@@ -1,6 +1,15 @@
 .venv/
 .venv313/
 __pycache__/
+
+# 上游号池（upstreams/）的构建产物与运行时数据
+upstreams/*/backend/bin/
+upstreams/*/data/
+upstreams/*/run.*.log
+upstreams/*/frontend/dist/
+upstreams/*/.gocache/
+# 含管理员口令与加密密钥的本地配置（用 *.example.yaml 做模板）
+upstreams/*/config.yaml
 *.pyc
 data/
 logs/

@@ -1,0 +1,189 @@
+package inference
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"math"
+	"net/http"
+	"strings"
+	"sync"
+
+	upstreamws "github.com/bogdanfinn/websocket"
+	"github.com/chenyme/grok2api/backend/internal/application/gateway"
+	"github.com/gin-gonic/gin"
+	clientws "github.com/gorilla/websocket"
+)
+
+const voiceWSMessageLimit = 16 << 20
+
+var voiceWSUpgrader = clientws.Upgrader{
+	ReadBufferSize:  32 << 10,
+	WriteBufferSize: 32 << 10,
+	CheckOrigin: func(*http.Request) bool {
+		return true
+	},
+	EnableCompression: true,
+}
+
+func (h *Handler) proxyRealtimeWebSocket(c *gin.Context) {
+	h.proxyVoiceWebSocket(c, "/realtime")
+}
+
+func (h *Handler) proxySTTWebSocket(c *gin.Context) {
+	if !clientws.IsWebSocketUpgrade(c.Request) {
+		writeOpenAIError(c, http.StatusMethodNotAllowed, "invalid_request", "STT 流式接口需要 WebSocket Upgrade")
+		return
+	}
+	h.proxyVoiceWebSocket(c, "/stt")
+}
+
+func (h *Handler) proxyVoiceWebSocket(c *gin.Context, pathValue string) {
+	if !clientws.IsWebSocketUpgrade(c.Request) {
+		writeOpenAIError(c, http.StatusBadRequest, "invalid_request", "请求不是有效的 WebSocket Upgrade")
+		return
+	}
+	clientKey, requestID, ok := requestIdentity(c)
+	if !ok {
+		return
+	}
+	model := strings.TrimSpace(c.Query("model"))
+	session, err := h.gateway.OpenVoiceWebSocket(c.Request.Context(), gateway.VoiceWebSocketInput{
+		RequestID: requestID, ClientKey: clientKey, PublicModel: model, Path: pathValue,
+	})
+	if err != nil {
+		writeGatewayError(c, err)
+		return
+	}
+
+	clientConn, err := voiceWSUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		session.Finalize(gateway.VoiceWebSocketOutcome{ErrorCode: "client_upgrade_failed"})
+		return
+	}
+	clientConn.SetReadLimit(voiceWSMessageLimit)
+	session.Conn.SetReadLimit(voiceWSMessageLimit)
+
+	var once sync.Once
+	var outcomeMu sync.Mutex
+	outcome := gateway.VoiceWebSocketOutcome{}
+	closeAll := func() {
+		once.Do(func() {
+			_ = clientConn.Close()
+			if session.Conn != nil {
+				_ = session.Conn.Close()
+			}
+			outcomeMu.Lock()
+			finalOutcome := outcome
+			outcomeMu.Unlock()
+			session.Finalize(finalOutcome)
+		})
+	}
+	defer closeAll()
+
+	// server.requestTimeout cancels c.Request.Context(), but a quiet,
+	// established voice/STT WebSocket has no read or write in flight to
+	// surface that cancellation. Without this watcher, closeAll only ran when
+	// a pump hit a transport error, so the session, its account lease, and
+	// its concurrency slot could outlive the configured request deadline
+	// indefinitely. closeAll is idempotent (sync.Once), so this races safely
+	// against the pumps finishing on their own via a transport error first.
+	go watchRequestTimeout(c.Request.Context(), &outcomeMu, &outcome.ErrorCode, closeAll)
+
+	type pumpResult struct {
+		upstreamSide bool
+		result       voiceWSPumpResult
+	}
+	errCh := make(chan pumpResult, 2)
+	go func() {
+		errCh <- pumpResult{result: proxyVoiceWSPump(func() (int, []byte, error) {
+			return clientConn.ReadMessage()
+		}, session.Conn.WriteMessage)}
+	}()
+	go func() {
+		errCh <- pumpResult{upstreamSide: true, result: proxyVoiceWSPump(func() (int, []byte, error) {
+			messageType, payload, readErr := session.Conn.ReadMessage()
+			if readErr == nil && pathValue == "/stt" {
+				if duration, ok := streamingSTTDuration(payload); ok {
+					outcomeMu.Lock()
+					outcome.AudioDurationSeconds = max(outcome.AudioDurationSeconds, duration)
+					outcomeMu.Unlock()
+				}
+			}
+			return messageType, payload, readErr
+		}, clientConn.WriteMessage)}
+	}()
+	first := <-errCh
+	if !isNormalVoiceWSClose(first.result.err) {
+		outcomeMu.Lock()
+		// A request-context watcher may have closed both sockets first. Keep
+		// its timeout/cancellation outcome instead of replacing it with the
+		// close error produced by our own cleanup.
+		if outcome.ErrorCode == "" {
+			if (first.upstreamSide && !first.result.writeFailed) || (!first.upstreamSide && first.result.writeFailed) {
+				outcome.ErrorCode = "upstream_stream_interrupted"
+				outcome.UpstreamFailed = true
+			} else {
+				outcome.ErrorCode = "client_stream_interrupted"
+			}
+		}
+		outcomeMu.Unlock()
+	}
+}
+
+// watchRequestTimeout closes the session once its request context is done.
+// Deadline cancellation is the configured request timeout; ordinary
+// cancellation is kept distinct so client disconnects and server shutdowns
+// are not reported as timeouts. Existing transport outcomes always win.
+func watchRequestTimeout(ctx context.Context, mu *sync.Mutex, errorCode *string, closeAll func()) {
+	<-ctx.Done()
+	mu.Lock()
+	if *errorCode == "" {
+		if ctx.Err() == context.DeadlineExceeded {
+			*errorCode = "request_timeout"
+		} else {
+			*errorCode = "request_canceled"
+		}
+	}
+	mu.Unlock()
+	closeAll()
+}
+
+func streamingSTTDuration(payload []byte) (float64, bool) {
+	var event struct {
+		Type     string  `json:"type"`
+		Duration float64 `json:"duration"`
+	}
+	if err := json.Unmarshal(payload, &event); err != nil || strings.TrimSpace(event.Type) != "transcript.done" {
+		return 0, false
+	}
+	if event.Duration <= 0 || math.IsNaN(event.Duration) || math.IsInf(event.Duration, 0) {
+		return 0, false
+	}
+	return event.Duration, true
+}
+
+type voiceWSPumpResult struct {
+	err         error
+	writeFailed bool
+}
+
+func proxyVoiceWSPump(read func() (int, []byte, error), write func(int, []byte) error) voiceWSPumpResult {
+	for {
+		messageType, payload, err := read()
+		if err != nil {
+			return voiceWSPumpResult{err: err}
+		}
+		if err := write(messageType, payload); err != nil {
+			return voiceWSPumpResult{err: err, writeFailed: true}
+		}
+	}
+}
+
+func isNormalVoiceWSClose(err error) bool {
+	if err == nil || err == io.EOF {
+		return true
+	}
+	return clientws.IsCloseError(err, clientws.CloseNormalClosure, clientws.CloseGoingAway) ||
+		upstreamws.IsCloseError(err, upstreamws.CloseNormalClosure, upstreamws.CloseGoingAway)
+}

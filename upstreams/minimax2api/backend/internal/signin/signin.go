@@ -1,0 +1,663 @@
+// Package signin drives the daily MiniMax check-in and the credit readings
+// that keep spent accounts out of rotation.
+//
+// Check-in works the same way on both deployments (the international
+// agent.minimax.io and the mainland agent.minimaxi.com). They share the same
+// product, the same check-in endpoints and the same `timezone_offset` parameter
+// set, so an account is signed against whichever host its region routes to and
+// no region is skipped.
+//
+// Balance reads are not region-specific either: the credit endpoint answers the
+// same way on both deployments, so mainland accounts have their balance
+// refreshed like any other.
+package signin
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"minimax2api/internal/config"
+	"minimax2api/internal/minimax"
+	"minimax2api/internal/store"
+)
+
+// Client is the slice of the upstream client this package depends on. Declaring
+// it here rather than taking *minimax.Client keeps the scheduler testable with a
+// stub and free of any dependency on the transport layer.
+type Client interface {
+	SigninStatus(ctx context.Context, cred minimax.Credential) (*minimax.SigninPanel, error)
+	SigninClaim(ctx context.Context, cred minimax.Credential) (*minimax.SigninClaim, error)
+	Credit(ctx context.Context, cred minimax.Credential) (*minimax.CreditInfo, error)
+	// Prepare runs the agent-side opening sequence. It has to happen before a
+	// claim rather than after — see checkAccount for what goes wrong otherwise.
+	Prepare(ctx context.Context, cred minimax.Credential) (*minimax.PrepareResult, error)
+	// CreditGrants reads the per-grant breakdown, which is the only evidence
+	// that a claimed payout was actually issued.
+	CreditGrants(ctx context.Context, cred minimax.Credential) ([]minimax.CreditGrant, error)
+}
+
+// AccountResult is one account's outcome within a sweep.
+type AccountResult struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Points int    `json:"points"`
+	Streak int    `json:"streak"`
+	Credit int    `json:"credit"`
+	Error  string `json:"error"`
+}
+
+// Report summarises a sweep.
+type Report struct {
+	StartedAt time.Time       `json:"startedAt"`
+	EndedAt   time.Time       `json:"endedAt"`
+	Total     int             `json:"total"`
+	Claimed   int             `json:"claimed"`
+	Already   int             `json:"already"`
+	Failed    int             `json:"failed"`
+	Skipped   int             `json:"skipped"`
+	Points    int             `json:"points"`
+	Results   []AccountResult `json:"results"`
+}
+
+// Service owns the daily timer and the credit poller.
+type Service struct {
+	store    *store.Store
+	client   Client
+	settings func() config.Settings
+	credOf   func(*store.Account) minimax.Credential
+
+	// now is the clock reconciliation reads. It is a field rather than a bare
+	// time.Now() call so a test can pin it: reconcile compares a claim against
+	// both the grace period and "the same local day", so a test that backdates
+	// a claim by a fixed offset lands on the previous day whenever the suite
+	// runs just after midnight, and reconcile then returns early before doing
+	// anything the test wanted to observe.
+	now func() time.Time
+
+	mu      sync.Mutex
+	running bool
+	last    *Report
+	lastAt  time.Time
+}
+
+// New builds a Service. credOf converts a stored account into the credential
+// the upstream client expects; it is injected so this package does not have to
+// import the gateway.
+func New(st *store.Store, client Client, settings func() config.Settings, credOf func(*store.Account) minimax.Credential) *Service {
+	return &Service{store: st, client: client, settings: settings, credOf: credOf, now: time.Now}
+}
+
+// clock reads the service clock, tolerating a Service built as a struct literal
+// without one.
+func (s *Service) clock() time.Time {
+	if s.now == nil {
+		return time.Now()
+	}
+	return s.now()
+}
+
+// Start launches the background loops. They stop when ctx is cancelled.
+func (s *Service) Start(ctx context.Context) {
+	go s.loop(ctx)
+	go s.creditLoop(ctx)
+}
+
+// LastReport returns the most recent sweep, if any.
+func (s *Service) LastReport() *Report {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.last
+}
+
+// LastRunAt reports when the last sweep finished.
+func (s *Service) LastRunAt() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastAt
+}
+
+// Running reports whether a sweep is in flight.
+func (s *Service) Running() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.running
+}
+
+// ------------------------------------------------------------------ schedule
+
+// slotOn is the configured check-in instant on the calendar day containing t.
+func (s *Service) slotOn(t time.Time) time.Time {
+	midnight := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	return midnight.Add(s.settings().SigninClock())
+}
+
+// NextRun is the next instant the sweep should fire.
+//
+// A slot that has already passed but was never served is due immediately rather
+// than skipped. Without that, a machine that was asleep at the scheduled minute
+// would silently miss the day, and a check-in tool that misses days is not worth
+// scheduling.
+func (s *Service) NextRun(now time.Time) time.Time {
+	slot := s.slotOn(now)
+	if now.Before(slot) {
+		return slot
+	}
+	if s.sweptOn(now) {
+		return slot.Add(24 * time.Hour)
+	}
+	return now
+}
+
+// sweptOn reports whether any account records a check-in attempt on the
+// calendar day containing t. Deriving it from the account records avoids a
+// second piece of persisted state that could disagree with them.
+func (s *Service) sweptOn(t time.Time) bool {
+	year, month, day := t.Date()
+	for _, account := range s.store.ListAccounts() {
+		if account.SigninAt.IsZero() {
+			continue
+		}
+		local := account.SigninAt.In(t.Location())
+		accountYear, accountMonth, accountDay := local.Date()
+		if accountYear == year && accountMonth == month && accountDay == day {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) loop(ctx context.Context) {
+	for {
+		next := s.NextRun(time.Now())
+		if !sleep(ctx, time.Until(next)) {
+			return
+		}
+		s.Sweep(ctx)
+		// Move straight to tomorrow's slot. Recomputing from NextRun would spin
+		// here whenever the sweep legitimately marks nothing — an empty pool, or
+		// a pool of accounts that were all skipped.
+		if !sleep(ctx, time.Until(s.slotOn(time.Now().Add(24*time.Hour)))) {
+			return
+		}
+	}
+}
+
+// sleep waits for d, reporting false if ctx was cancelled first. A zero or
+// negative duration returns immediately.
+func sleep(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return ctx.Err() == nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+// -------------------------------------------------------------------- sweep
+
+// Sweep runs one check-in pass over the pool.
+//
+// Accounts are visited one at a time with a gap between them. Check-in sits
+// behind the same risk control as everything else on the site, and a burst of
+// simultaneous requests from a single address is the pattern that attracts it.
+func (s *Service) Sweep(ctx context.Context) *Report {
+	s.mu.Lock()
+	if s.running {
+		// Report "nothing happened" rather than the previous run: the console
+		// needs to tell the operator that their click was absorbed by an
+		// in-flight sweep, not that it completed instantly.
+		s.mu.Unlock()
+		return nil
+	}
+	s.running = true
+	s.mu.Unlock()
+
+	report := &Report{StartedAt: time.Now()}
+	defer func() {
+		report.EndedAt = time.Now()
+		s.mu.Lock()
+		s.running = false
+		s.last = report
+		s.lastAt = report.EndedAt
+		s.mu.Unlock()
+	}()
+
+	accounts := s.store.ListAccounts()
+	gap := s.settings().SigninGap()
+
+	for index, account := range accounts {
+		if ctx.Err() != nil {
+			break
+		}
+		result := s.checkAccount(ctx, account)
+		report.Total++
+		switch result.Status {
+		case store.SigninOK:
+			report.Claimed++
+			report.Points += result.Points
+		case store.SigninAlready:
+			report.Already++
+		case store.SigninSkipped:
+			report.Skipped++
+		default:
+			report.Failed++
+		}
+		report.Results = append(report.Results, result)
+		if index < len(accounts)-1 && gap > 0 {
+			if !sleep(ctx, gap) {
+				break
+			}
+		}
+	}
+	log.Printf("签到完成：共 %d，新领 %d，已领 %d，失败 %d，跳过 %d，本次积分 %d",
+		report.Total, report.Claimed, report.Already, report.Failed, report.Skipped, report.Points)
+	return report
+}
+
+// CheckOne runs the check-in for a single account, for the console's manual
+// trigger.
+func (s *Service) CheckOne(ctx context.Context, id string) (AccountResult, error) {
+	account, ok := s.store.AccountByID(id)
+	if !ok {
+		return AccountResult{}, errors.New("账号不存在")
+	}
+	return s.checkAccount(ctx, account), nil
+}
+
+// checkAccount performs the status-then-claim sequence for one account.
+func (s *Service) checkAccount(ctx context.Context, account *store.Account) AccountResult {
+	result := AccountResult{ID: account.ID, Name: account.Name}
+	if account.Credit != nil {
+		result.Credit = account.Credit.Total
+	}
+
+	// Refuse to sign an account the protocol does not cover, and say so plainly
+	// instead of recording a failure that looks like a broken token.
+	if reason := skipReason(account); reason != "" {
+		result.Status = store.SigninSkipped
+		result.Error = reason
+		s.record(account.ID, func(target *store.Account) {
+			target.SigninAt = time.Now()
+			target.SigninStatus = store.SigninSkipped
+			target.SigninError = reason
+		})
+		return result
+	}
+
+	cred := s.credOf(account)
+	timeout := s.settings().SigninTimeout()
+
+	// The agent-side opening sequence runs first — before the status read as well
+	// as before the claim, matching the order the web client uses.
+	//
+	// `/config` is what creates the account's record on the agent side. A claim
+	// made before that record exists is registered and never paid out: the
+	// endpoint still answers `claim_result=1`, so the failure is completely
+	// silent, and running the sequence afterwards does not bring the points
+	// back. Measured on fresh accounts, the correct order paid out 4/4 times
+	// (within seconds) while the reverse order left two accounts at zero for
+	// good.
+	//
+	// So a failure here stops the check-in. Losing a day to a visible failure is
+	// recoverable — the operator can re-run the sweep — whereas a claim in the
+	// wrong order loses the day and reports success.
+	prepareCtx, cancelPrepare := context.WithTimeout(ctx, timeout)
+	_, prepareErr := s.client.Prepare(prepareCtx, cred)
+	cancelPrepare()
+	if prepareErr != nil {
+		return s.fail(account, result, fmt.Errorf("agent 侧初始化失败，已跳过领取以免积分静默丢失: %w", prepareErr))
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	panel, err := s.client.SigninStatus(callCtx, cred)
+	if err != nil {
+		return s.fail(account, result, err)
+	}
+	result.Streak = panel.TodayDayNo
+
+	if panel.ClaimedToday {
+		// Already served today: still refresh the balance, because the sweep is
+		// the only time we know the account is reachable.
+		result.Status = store.SigninAlready
+		result.Points = panel.TodayPoints
+		credit := s.refreshCredit(ctx, account)
+		if credit >= 0 {
+			result.Credit = credit
+		}
+		s.record(account.ID, func(target *store.Account) {
+			target.SigninAt = time.Now()
+			target.SigninStatus = store.SigninAlready
+			target.SigninStreak = panel.TodayDayNo
+			target.SigninPoints = panel.TodayPoints
+			target.SigninError = ""
+			target.SigninPanel = panelOf(panel)
+		})
+		return result
+	}
+
+	// The opening sequence already ran, above the status read.
+	claimCtx, cancelClaim := context.WithTimeout(ctx, timeout)
+	defer cancelClaim()
+	claim, err := s.client.SigninClaim(claimCtx, cred)
+	if err != nil {
+		return s.fail(account, result, err)
+	}
+
+	result.Points = claim.Points
+	result.Streak = claim.DayNo
+	if claim.IsDuplicate() {
+		result.Status = store.SigninAlready
+	} else {
+		result.Status = store.SigninOK
+	}
+	credit := s.refreshCredit(ctx, account)
+	if credit >= 0 {
+		result.Credit = credit
+	}
+
+	// Prefer the board the upstream echoed back from the claim: it is the state
+	// *after* the claim. The panel fetched a moment earlier still shows today as
+	// unclaimed, and storing that would leave the console displaying "claimed"
+	// beside an empty dot for today.
+	stored := claim.Panel
+	if stored == nil {
+		stored = claimPanel(panel, claim)
+	}
+
+	s.record(account.ID, func(target *store.Account) {
+		target.SigninAt = time.Now()
+		target.SigninStatus = result.Status
+		target.SigninStreak = claim.DayNo
+		target.SigninPoints = claim.Points
+		target.SigninError = ""
+		target.SigninPanel = panelOf(stored)
+		if !claim.IsDuplicate() && claim.Points > 0 {
+			target.SigninTotal += int64(claim.Points)
+		}
+	})
+	return result
+}
+
+// claimPanel folds a claim onto the board fetched just before it.
+//
+// Fallback for when the claim response carries no panel of its own. The only
+// thing a claim changes is today's slot, and the claim response names that slot
+// explicitly, so there is nothing to guess at.
+//
+// A duplicate answer ("already claimed today") still means today is served. We
+// only reach the claim at all when the earlier board said it was not, so the
+// board was the stale one — trust the claim about the claim.
+func claimPanel(before *minimax.SigninPanel, claim *minimax.SigninClaim) *minimax.SigninPanel {
+	if before == nil {
+		return nil
+	}
+	after := &minimax.SigninPanel{
+		Scene:        before.Scene,
+		TodayDayNo:   before.TodayDayNo,
+		TodayPoints:  before.TodayPoints,
+		ClaimedToday: before.ClaimedToday,
+		Days:         append([]minimax.SigninDay(nil), before.Days...),
+	}
+	for i, day := range after.Days {
+		if day.IsToday || (claim.DayNo > 0 && day.DayNo == claim.DayNo) {
+			after.Days[i].Status = minimax.SigninDayClaimed
+			// A duplicate answer may not restate the points; keep what the board
+			// already said rather than blanking a day that was worth something.
+			if claim.Points > 0 {
+				after.Days[i].Points = claim.Points
+			}
+			after.ClaimedToday = true
+			after.TodayPoints = after.Days[i].Points
+			after.TodayDayNo = after.Days[i].DayNo
+		}
+	}
+	return after
+}
+
+// fail records an unsuccessful attempt. The attempt timestamp is written even
+// on failure so the day counts as served: otherwise a sweep in which every
+// account errored would be retried on the next tick, and a persistent upstream
+// outage would turn into a request loop.
+func (s *Service) fail(account *store.Account, result AccountResult, err error) AccountResult {
+	result.Status = store.SigninFailed
+	result.Error = truncate(err.Error(), 200)
+
+	invalid := errors.Is(err, minimax.ErrInvalidCredential)
+	s.record(account.ID, func(target *store.Account) {
+		target.SigninAt = time.Now()
+		target.SigninStatus = store.SigninFailed
+		target.SigninError = result.Error
+		if invalid {
+			target.Status = store.StatusInvalid
+			target.CooldownUntil = time.Time{}
+			target.LastError = "签到：令牌已被上游拒绝"
+		}
+	})
+	return result
+}
+
+// skipReason explains why an account cannot be checked in, or "" when it can.
+func skipReason(account *store.Account) string {
+	if !account.Enabled {
+		return "账号已禁用"
+	}
+	if strings.TrimSpace(account.Token) == "" || account.UUID == "" || account.DeviceID == "" {
+		return "缺少令牌或设备指纹"
+	}
+	// Every signed endpoint needs user_id, and the upstream answers a bare 401
+	// without it — the same 401 a dead token produces. Attempting the call would
+	// therefore retire a healthy account as invalid, so refuse before spending
+	// the request. The value is usually filled in automatically when the account
+	// is added; reaching here means that discovery failed.
+	if strings.TrimSpace(account.UserID) == "" || account.UserID == "0" {
+		return "缺少 user_id（realUserID），未从上游取得，无法签到"
+	}
+	return ""
+}
+
+// record applies a mutation to a stored account.
+func (s *Service) record(id string, mutate func(*store.Account)) {
+	s.store.SaveAccountState(id, mutate)
+}
+
+func panelOf(panel *minimax.SigninPanel) *store.SigninPanel {
+	if panel == nil {
+		return nil
+	}
+	out := &store.SigninPanel{Scene: panel.Scene, Days: make([]store.SigninDay, 0, len(panel.Days))}
+	for _, day := range panel.Days {
+		out.Days = append(out.Days, store.SigninDay{
+			DayNo: day.DayNo, Points: day.Points, Status: day.Status, IsToday: day.IsToday,
+		})
+	}
+	return out
+}
+
+// ---------------------------------------------------------------- reconciling
+
+// reconcileGrace is how long a payout is given to show up after a claim.
+//
+// The grant list lags the claim. A payout has been observed as fast as zero
+// seconds, but a reading taken five seconds later still showed nothing and one
+// case took over a minute to appear. Judging any sooner than this would report a
+// perfectly healthy check-in as unpaid.
+const reconcileGrace = 5 * time.Minute
+
+// reconcile decides whether today's claimed points were actually issued.
+//
+// The claim endpoint cannot answer this. It reports `claim_result=1` whether or
+// not the points were ever created — when the account's agent-side record did
+// not exist at claim time they are dropped, silently and permanently — so the
+// only evidence is a credit grant dated today.
+//
+// The decision reads the grant's *timestamp*, never its balance. An account that
+// legitimately spent everything still has the grant, and must not be reported as
+// unpaid for having used what it was given.
+//
+// Costs one request per account per balance refresh, and only while a claim is
+// outstanding for the current day; the balance poller is off by default.
+func (s *Service) reconcile(ctx context.Context, account *store.Account) {
+	if account.Region != store.RegionGlobal || account.SigninAt.IsZero() {
+		return
+	}
+	switch account.SigninStatus {
+	case store.SigninOK, store.SigninAlready, store.SigninUnpaid:
+	default:
+		return
+	}
+	// Only today's claim is judgeable: a grant list cannot say which day a
+	// missing payout belonged to, and yesterday's is already beyond recovery.
+	now := s.clock()
+	if !sameLocalDay(account.SigninAt, now) {
+		return
+	}
+	if now.Sub(account.SigninAt) < reconcileGrace {
+		return
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, s.settings().SigninTimeout())
+	defer cancel()
+	grants, err := s.client.CreditGrants(callCtx, s.credOf(account))
+	if err != nil {
+		// A read failure says nothing about the payout. Leave the state alone
+		// rather than flagging an account on a hiccup.
+		return
+	}
+
+	for _, grant := range grants {
+		if sameLocalDay(grant.GrantedAt, account.SigninAt) {
+			// Paid. Clear a flag set by an earlier pass, which is possible
+			// because the grant can take a minute to appear. The distinction
+			// between ok and already is not worth preserving here; the claim is
+			// confirmed either way.
+			if account.SigninStatus == store.SigninUnpaid {
+				s.record(account.ID, func(target *store.Account) {
+					target.SigninStatus = store.SigninOK
+					target.SigninError = ""
+				})
+			}
+			return
+		}
+	}
+
+	s.record(account.ID, func(target *store.Account) {
+		target.SigninStatus = store.SigninUnpaid
+		target.SigninError = "签到返回成功，但上游没有发放积分：credit/details 里没有今天的发放记录（顺序或风控问题，次日重试）"
+	})
+}
+
+// sameLocalDay reports whether two instants fall on the same calendar day.
+func sameLocalDay(a, b time.Time) bool {
+	if a.IsZero() || b.IsZero() {
+		return false
+	}
+	ay, am, ad := a.Local().Date()
+	by, bm, bd := b.Local().Date()
+	return ay == by && am == bm && ad == bd
+}
+
+// ------------------------------------------------------------------- credit
+
+// refreshCredit reads the balance and stores it, returning the new total or -1
+// when the read failed.
+//
+// The failure path is deliberately silent about status: a credit read failing
+// says nothing about whether the token works, and marking the account invalid
+// here would retire healthy accounts whenever the balance endpoint hiccups.
+func (s *Service) refreshCredit(ctx context.Context, account *store.Account) int {
+	// Independent of the balance read: a claim that paid out is worth confirming
+	// even when the balance endpoint is unhappy.
+	s.reconcile(ctx, account)
+
+	callCtx, cancel := context.WithTimeout(ctx, s.settings().SigninTimeout())
+	defer cancel()
+
+	info, err := s.client.Credit(callCtx, s.credOf(account))
+	if err != nil {
+		return -1
+	}
+	s.record(account.ID, func(target *store.Account) {
+		target.Credit = &store.Credit{
+			Total: info.Total, Free: info.Free, Purchased: info.Purchased,
+			PlanName: info.PlanName, PlanType: info.PlanType, SyncedAt: time.Now(),
+		}
+	})
+	return info.Total
+}
+
+// RefreshCredit is the console's manual balance refresh.
+func (s *Service) RefreshCredit(ctx context.Context, id string) (*store.Credit, error) {
+	account, ok := s.store.AccountByID(id)
+	if !ok {
+		return nil, errors.New("账号不存在")
+	}
+	s.reconcile(ctx, account)
+	callCtx, cancel := context.WithTimeout(ctx, s.settings().SigninTimeout())
+	defer cancel()
+
+	info, err := s.client.Credit(callCtx, s.credOf(account))
+	if err != nil {
+		return nil, err
+	}
+	credit := &store.Credit{
+		Total: info.Total, Free: info.Free, Purchased: info.Purchased,
+		PlanName: info.PlanName, PlanType: info.PlanType, SyncedAt: time.Now(),
+	}
+	s.record(id, func(target *store.Account) { target.Credit = credit })
+	return credit, nil
+}
+
+// creditLoop keeps the stored balances warm so the routing guard has something
+// current to act on without waiting for the next sweep.
+//
+// The loop runs independently of the sign-in switch: balance reads work for
+// both regions, so Signin.Enabled must not gate it. It is controlled solely by
+// CreditRefresh(), where 0 disables polling.
+func (s *Service) creditLoop(ctx context.Context) {
+	for {
+		interval := s.settings().CreditRefresh()
+		if interval <= 0 {
+			// Disabled. Re-check periodically rather than returning, so turning
+			// the poller back on in the console takes effect without a restart.
+			if !sleep(ctx, time.Minute) {
+				return
+			}
+			continue
+		}
+		if !sleep(ctx, interval) {
+			return
+		}
+		for _, account := range s.store.ListAccounts() {
+			if ctx.Err() != nil {
+				return
+			}
+			if !account.Enabled {
+				continue
+			}
+			s.refreshCredit(ctx, account)
+			if !sleep(ctx, s.settings().SigninGap()) {
+				return
+			}
+		}
+	}
+}
+
+func truncate(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "…"
+}
