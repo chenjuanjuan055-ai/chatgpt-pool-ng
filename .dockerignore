@@ -2,6 +2,7 @@
 .gitignore
 .idea
 .venv
+.venv313
 __pycache__
 *.pyc
 *.pyo
@@ -9,6 +10,14 @@ __pycache__
 
 web/.next
 web/node_modules
+
+# 上游号池的构建产物与运行时数据（镜像里会重新构建 / 用卷挂载）
+upstreams/*/backend/bin
+upstreams/*/data
+upstreams/*/frontend/node_modules
+upstreams/*/frontend/dist
+upstreams/*/.gocache
+upstreams/*/run.*.log
 
 assets
 README.md

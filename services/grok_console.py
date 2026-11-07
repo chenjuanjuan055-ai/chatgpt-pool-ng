@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import uuid
 import time
@@ -72,12 +73,18 @@ class GrokConsole:
     # ---------- settings ----------
     def settings(self) -> dict[str, Any]:
         if not DATA_FILE.exists():
-            return dict(_DEFAULT)
-        try:
-            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
-            return {**_DEFAULT, **{k: str(v) for k, v in data.items() if k in _DEFAULT}}
-        except Exception:
-            return dict(_DEFAULT)
+            data: dict[str, Any] = {}
+        else:
+            try:
+                data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+        merged = {**_DEFAULT, **{k: str(v) for k, v in data.items() if k in _DEFAULT}}
+        # 环境变量优先：容器里 grok2api 是另一个 service，要用服务名而不是 127.0.0.1。
+        env_base = (os.getenv("GROK2API_BASE_URL") or "").strip()
+        if env_base:
+            merged["base_url"] = env_base.rstrip("/")
+        return merged
 
     def save_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
         current = self.settings()

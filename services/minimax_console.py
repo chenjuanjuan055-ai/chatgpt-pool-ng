@@ -14,6 +14,7 @@ minimax2api 默认只监听 VPS 上的 127.0.0.1:8095，所以这里内置 SSH �
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 import threading
@@ -70,6 +71,16 @@ class MinimaxConsole:
                     settings.update({k: v for k, v in raw.items() if k in settings})
             except Exception:
                 pass
+        # 环境变量优先：容器里 minimax2api 是另一个 service，要用服务名。
+        env_base = (os.getenv("MINIMAX_BASE_URL") or "").strip()
+        if env_base:
+            settings["base_url"] = env_base.rstrip("/")
+        env_user = (os.getenv("MINIMAX_ADMIN_USER") or "").strip()
+        if env_user:
+            settings["username"] = env_user
+        env_pass = (os.getenv("MINIMAX_ADMIN_PASSWORD") or "").strip()
+        if env_pass:
+            settings["password"] = env_pass
         return settings
 
     def _save(self, settings: dict[str, Any]) -> None:
